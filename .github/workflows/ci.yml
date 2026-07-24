@@ -21,23 +21,12 @@ jobs:
         with:
           node-version: 22
 
-      - name: Extract source release
-        run: |
-          mkdir -p _build
-          unzip -q releases/project-sovereign-v0.2.0-source.zip -d _build
-          test -f _build/project-sovereign/package.json
-
-      - name: Install dependencies
-        working-directory: _build/project-sovereign
-        run: npm install --no-audit --no-fund
-
-      - name: Verify tests, types and build
-        working-directory: _build/project-sovereign
-        run: npm run verify
+      - name: Decode, verify and build release
+        run: bash cloudflare-build.sh
 
       - name: Upload static build
         uses: actions/upload-artifact@v4
         with:
           name: project-sovereign-dist
-          path: _build/project-sovereign/dist
+          path: dist
           if-no-files-found: error
