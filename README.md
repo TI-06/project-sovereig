@@ -32,23 +32,9 @@
 
 外部の有料API、サーバー、画像素材は不要です。
 
-## 開発コマンド
+## ソース構成
 
-```bash
-npm install
-npm run verify
-npm run serve
-```
-
-`npm run serve`後、`http://localhost:4173`をPCブラウザで開きます。
-
-| コマンド | 内容 |
-|---|---|
-| `npm test` | 単体・再現性・1,200ターン耐久・構成テスト |
-| `npm run typecheck` | TypeScript厳格チェック |
-| `npm run build` | `dist/`へ静的ファイルを生成 |
-| `npm run verify` | テスト、型検査、ビルドを一括実行 |
-| `npm run serve` | `dist/`をローカル配信 |
+完全なソース一式は`releases/project-sovereign-v0.2.0-source.zip`へ格納されています。GitHub連携で登録したZIPがBase64テキストとして保持される場合があるため、`cloudflare-build.sh`が形式を判定してデコード・展開します。
 
 ## Cloudflare Pagesへの無料公開
 
@@ -57,13 +43,13 @@ GitHubリポジトリをCloudflare Pagesへ接続し、以下を設定します�
 | 設定 | 値 |
 |---|---|
 | Framework preset | None |
-| Build command | `npm install --no-audit --no-fund && npm run build` |
+| Build command | `bash cloudflare-build.sh` |
 | Build output directory | `dist` |
-| Root directory | `/` |
+| Root directory | 空欄または`/` |
 | Production branch | `main` |
-| Node.js version | `22` |
+| Environment variable | `NODE_VERSION=22.16.0` |
 
-`public/_headers`と`public/_redirects`はビルド時に`dist/`へコピーされます。
+ビルドスクリプト内でソース展開、`npm install`、34件のテスト、型検査、静的ビルドを実行します。
 
 ## 設計上の制約
 
@@ -71,10 +57,11 @@ GitHubリポジトリをCloudflare Pagesへ接続し、以下を設定します�
 - 全状態はJSONへシリアライズ可能です。
 - UIに国家計算式を置かず、シミュレーションエンジンと分離します。
 - セーブデータはチェックサムで破損を検出します。
-- 現時点の正本はローカル実装です。GitHubの空リポジトリ作成後にブランチと履歴を投入します。
+- `main`ブランチを公開版の正本とします。
 
 ## ドキュメント
 
+- `DEPLOY.md`
 - `docs/superpowers/specs/2026-07-24-project-sovereign-master-design.md`
 - `docs/superpowers/plans/2026-07-24-project-sovereign-foundation.md`
 - `docs/superpowers/plans/2026-07-24-project-sovereign-expanded-systems.md`
