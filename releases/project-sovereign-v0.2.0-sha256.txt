@@ -1,0 +1,1 @@
+Source archive SHA-256 is provided in the downloadable release artifact generated with this build. Verify the locally downloaded archive against /mnt/data/project-sovereign-v0.2.0-sha256.txt from the project handoff.
