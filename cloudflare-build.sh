@@ -22,3 +22,8 @@ cd "$WORK_DIR/project-sovereign"
 npm install --no-audit --no-fund
 npm run verify
 cp -R dist ../../dist
+
+# Wrangler Static Assets rejects the Pages-style SPA fallback rule
+# (`/* /index.html 200`) as an infinite redirect loop. This application uses
+# a single document with in-page navigation, so the redirect file is unnecessary.
+rm -f ../../dist/_redirects
