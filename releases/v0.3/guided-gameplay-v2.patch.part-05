@@ -1,0 +1,35 @@
++  assert.doesNotMatch(buildScript, /base64|sha256|unzip/);
++  assert.match(buildScript, /npm run verify/);
+ 
+   const workflow = read('.github/workflows/ci.yml');
+   assert.match(workflow, /npm run verify/);
+diff --git a/tests/ui-contract.test.ts b/tests/ui-contract.test.ts
+index 067402f..8ff58c2 100644
+--- a/tests/ui-contract.test.ts
++++ b/tests/ui-contract.test.ts
+@@ -13,7 +13,10 @@ test('built app exposes the playable government console', () => {
+   assert.match(script, /国防・戦争/);
+   assert.match(script, /情報・諜報/);
+   assert.match(script, /危機管理/);
+-  assert.match(script, /国家実績/);
++  assert.match(script, /初心者ミッション/);
++  assert.match(script, /遊び方・用語・詰まったとき/);
++  assert.match(script, /未確定命令/);
++  assert.match(script, /data-advance/);
+   assert.match(script, /data-law-action/);
+   assert.match(script, /data-intel-operation/);
+   const css = readFileSync('dist/styles.css', 'utf8');
+diff --git a/wrangler.jsonc b/wrangler.jsonc
+new file mode 100644
+index 0000000..e3a766a
+--- /dev/null
++++ b/wrangler.jsonc
+@@ -0,0 +1,8 @@
++{
++  "$schema": "node_modules/wrangler/config-schema.json",
++  "name": "project-sovereig",
++  "compatibility_date": "2026-07-25",
++  "assets": {
++    "directory": "./dist"
++  }
++}
