@@ -59,11 +59,11 @@ fi
 printf 'v0.4 text patch bytes: %s\n' "$(wc -c < "$V04_PATCH" | tr -d ' ')"
 
 cd "$PROJECT"
-if ! git apply --check "$V04_PATCH"; then
+if ! patch --batch --forward --dry-run -p1 < "$V04_PATCH" >/dev/null; then
   echo 'ERROR: v0.4 patch does not apply to reconstructed v0.3 source.' >&2
   exit 1
 fi
-git apply "$V04_PATCH"
+patch --batch --forward -p1 < "$V04_PATCH"
 echo 'v0.4 patch applied.'
 
 for required in \
