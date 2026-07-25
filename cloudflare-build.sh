@@ -1,51 +1,44 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_VERSION="2026-07-25.3"
-REPO_ROOT="$(pwd)"
-SOURCE_ARCHIVE="$REPO_ROOT/releases/project-sovereign-v0.2.0-source.zip"
-WORK_DIR="$REPO_ROOT/.cf-build"
-DECODED_ARCHIVE="$WORK_DIR/project-sovereign-source.zip"
-OUTPUT_DIR="$REPO_ROOT/dist"
+ROOT="$(pwd)"
+WORK="$ROOT/.cf-build"
+OUTPUT="$ROOT/dist"
+BASE="$ROOT/releases/project-sovereign-v0.2.0-source.zip"
+PATCH="$WORK/project-sovereign-v0.3.0-runtime-patch.zip"
+EXPECTED_PATCH_SHA="dc402f5ace0f95e10ac7733537813eb07e46116c4df9ad7ecb6840543a1ea53c"
 
-printf 'PROJECT SOVEREIGN Cloudflare build %s\n' "$SCRIPT_VERSION"
+printf 'PROJECT SOVEREIGN Cloudflare build v0.3.0\n'
 printf 'Repository commit: %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
-rm -rf "$WORK_DIR" "$OUTPUT_DIR"
-mkdir -p "$WORK_DIR"
+rm -rf "$WORK" "$OUTPUT"
+mkdir -p "$WORK"
 
-# The archive can be a normal ZIP or Base64 text, depending on how it was uploaded.
-if unzip -tqq "$SOURCE_ARCHIVE" >/dev/null 2>&1; then
-  cp "$SOURCE_ARCHIVE" "$DECODED_ARCHIVE"
-else
-  base64 --decode "$SOURCE_ARCHIVE" > "$DECODED_ARCHIVE"
-  unzip -tqq "$DECODED_ARCHIVE"
-fi
+unzip -tqq "$BASE"
+unzip -q "$BASE" -d "$WORK"
 
-unzip -q "$DECODED_ARCHIVE" -d "$WORK_DIR"
-PROJECT_DIR="$WORK_DIR/project-sovereign"
-test -f "$PROJECT_DIR/package.json"
+cat "$ROOT"/releases/v0.3/runtime-patch.b64.part-* | tr -d '\r\n' | base64 --decode > "$PATCH"
+echo "$EXPECTED_PATCH_SHA  $PATCH" | sha256sum -c -
+unzip -tqq "$PATCH"
+unzip -qo "$PATCH" -d "$WORK"
 
-cd "$PROJECT_DIR"
+PROJECT="$WORK/project-sovereign"
+test -f "$PROJECT/package.json"
+cd "$PROJECT"
 npm install --no-audit --no-fund
-npm run verify
+npm run typecheck
+npm run build
 
-# Copy the completed static build to the repository-level output directory.
-cp -a dist "$OUTPUT_DIR"
+cd "$ROOT"
+cp -a "$PROJECT/dist" "$OUTPUT"
+find "$OUTPUT" -type f -name '_redirects' -print -delete
+printf '_redirects\n' > "$OUTPUT/.assetsignore"
 
-# This project is deployed by Workers Static Assets, not Pages. Workers parses every
-# _redirects file in the asset tree and rejects the Pages SPA rewrite as an infinite
-# redirect. The application uses one HTML document and in-page navigation, so no
-# redirect/rewrite file is required.
-printf 'Removing incompatible redirect files:\n'
-find "$OUTPUT_DIR" -type f -name '_redirects' -print -delete
-
-# Also tell Wrangler not to upload Pages control files even if a future build adds them.
-printf '_redirects\n' > "$OUTPUT_DIR/.assetsignore"
-
-if find "$OUTPUT_DIR" -type f -name '_redirects' -print -quit | grep -q .; then
+if find "$OUTPUT" -type f -name '_redirects' -print -quit | grep -q .; then
   echo 'ERROR: _redirects still exists in deployment output.' >&2
   exit 1
 fi
 
-printf 'Deployment output verified: %s files, no _redirects.\n' "$(find "$OUTPUT_DIR" -type f | wc -l | tr -d ' ')"
+test -f "$OUTPUT/index.html"
+grep -q '遊び方' "$OUTPUT/src/ui/main.js"
+printf 'Deployment output verified: %s files, no _redirects.\n' "$(find "$OUTPUT" -type f | wc -l | tr -d ' ')"

@@ -1,0 +1,3 @@
+dc402f5ace0f95e10ac7733537813eb07e46116c4df9ad7ecb6840543a1ea53c  project-sovereign-v0.3.0-runtime-patch.zip
+162f84fd1084442555c5fabb38e8296ef6d2535356e7106ff812a77fcbd74d76  project-sovereign-v0.3.0-source.zip
+13574ccada542f4e9a277c3f9e7fb30e91c4f8727e5d35dcee14de7d7d3fa793  project-sovereign-v0.3.0-static.zip
