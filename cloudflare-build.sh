@@ -5,65 +5,56 @@ ROOT="$(pwd)"
 WORK="$ROOT/.cf-build"
 OUTPUT="$ROOT/dist"
 BASE="$ROOT/releases/project-sovereign-v0.2.0-source.zip"
-PATCH="$WORK/project-sovereign-v0.3.0-runtime-patch.zip"
+TEXT_PATCH="$WORK/guided-gameplay-v0.3.patch"
 
-printf 'PROJECT SOVEREIGN Cloudflare build v0.3.0\n'
+printf 'PROJECT SOVEREIGN Cloudflare build v0.3.0-text-patch\n'
 printf 'Repository commit: %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 rm -rf "$WORK" "$OUTPUT"
 mkdir -p "$WORK"
 
-# Validate and extract the known-good v0.2 base archive.
+# The v0.2 base archive is the previously verified source that already built
+# successfully on Cloudflare. v0.3 itself is applied as ordinary Git-tracked text,
+# so there is no Base64 decoding, runtime ZIP reconstruction, CRC or SHA check.
 unzip -tqq "$BASE"
 unzip -q "$BASE" -d "$WORK"
-
-# Reconstruct the v0.3 patch from Git-tracked Base64 text chunks.
-# A ZIP byte checksum is intentionally not fixed here: ZIP metadata such as file
-# timestamps can change the archive SHA even when all extracted files are identical.
-shopt -s nullglob
-PATCH_PARTS=("$ROOT"/releases/v0.3/runtime-patch.b64.part-*)
-if (( ${#PATCH_PARTS[@]} == 0 )); then
-  echo 'ERROR: v0.3 runtime patch chunks were not found.' >&2
-  exit 1
-fi
-
-printf 'Runtime patch chunks: %s\n' "${#PATCH_PARTS[@]}"
-cat "${PATCH_PARTS[@]}" | tr -d '\r\n\t ' | base64 --decode > "$PATCH"
-printf 'Runtime patch SHA-256: %s\n' "$(sha256sum "$PATCH" | awk '{print $1}')"
-
-# Verify the reconstructed archive itself and the files required by this release.
-unzip -tqq "$PATCH"
-PATCH_ENTRIES="$(unzip -Z1 "$PATCH")"
-for required in \
-  'project-sovereign/package.json' \
-  'project-sovereign/src/ui/main.ts' \
-  'project-sovereign/src/ui/portraits.ts'; do
-  if ! grep -Fxq "$required" <<< "$PATCH_ENTRIES"; then
-    echo "ERROR: runtime patch is missing $required" >&2
-    exit 1
-  fi
-done
-
-unzip -qo "$PATCH" -d "$WORK"
-
 PROJECT="$WORK/project-sovereign"
 test -f "$PROJECT/package.json"
+
+shopt -s nullglob
+PATCH_PARTS=("$ROOT"/releases/v0.3/guided-gameplay.patch.part-*)
+if (( ${#PATCH_PARTS[@]} == 0 )); then
+  echo 'ERROR: guided gameplay text patch files were not found.' >&2
+  exit 1
+fi
+printf 'Guided gameplay text patch parts: %s\n' "${#PATCH_PARTS[@]}"
+cat "${PATCH_PARTS[@]}" > "$TEXT_PATCH"
+
 cd "$PROJECT"
+patch --batch --forward -p1 < "$TEXT_PATCH"
+
+test -f src/domain/command-planning.ts
+test -f src/ui/guidance.ts
+test -f src/ui/portraits.ts
+test ! -f public/_redirects
+
 npm install --no-audit --no-fund
-npm run typecheck
-npm run build
+npm run verify
 
 cd "$ROOT"
 cp -a "$PROJECT/dist" "$OUTPUT"
-find "$OUTPUT" -type f -name '_redirects' -print -delete
+rm -f "$OUTPUT/_redirects"
 printf '_redirects\n' > "$OUTPUT/.assetsignore"
+
+test -f "$OUTPUT/index.html"
+test -f "$OUTPUT/src/ui/main.js"
+grep -q '初心者ミッション' "$OUTPUT/src/ui/main.js"
+grep -q '遊び方・用語・詰まったとき' "$OUTPUT/src/ui/main.js"
+grep -q '未確定命令' "$OUTPUT/src/ui/main.js"
 
 if find "$OUTPUT" -type f -name '_redirects' -print -quit | grep -q .; then
   echo 'ERROR: _redirects still exists in deployment output.' >&2
   exit 1
 fi
 
-test -f "$OUTPUT/index.html"
-test -f "$OUTPUT/src/ui/main.js"
-grep -q '遊び方' "$OUTPUT/src/ui/main.js"
-printf 'Deployment output verified: %s files, no _redirects.\n' "$(find "$OUTPUT" -type f | wc -l | tr -d ' ')"
+printf 'Deployment output verified: %s files, no reconstructed v0.3 archive.\n' "$(find "$OUTPUT" -type f | wc -l | tr -d ' ')"
