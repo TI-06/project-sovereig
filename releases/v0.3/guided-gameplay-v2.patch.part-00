@@ -1,0 +1,170 @@
+diff --git a/.gitignore b/.gitignore
+index d739a5c..708bdfe 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,5 +1,5 @@
+-.worktrees/
+ node_modules/
+ dist/
++.playwright/
+ *.log
+ .DS_Store
+diff --git a/README.md b/README.md
+index c464326..3a69d54 100644
+--- a/README.md
++++ b/README.md
+@@ -1,81 +1,27 @@
+ # PROJECT SOVEREIGN
+ 
+-**Public Alpha v0.2.0**
++**Public Alpha v0.3.0 — Guided Gameplay Update**
+ 
+-経済・企業・国民・政治・外交が月次で相互作用する、PCブラウザ向けの本格国家運営シミュレーションです。
++初めて遊ぶ人でも「何を見て、何をすればよいか」が分かる国家運営シミュレーションです。
+ 
+-## 現在の実装範囲
++## v0.3.0
+ 
+-- 4国家、12地域、8商品、24企業、36人口コホート
+-- 1ターン1か月、1・3・6・12か月の一括進行
+-- 税率、政策金利、教育・医療・産業予算の変更
+-- GDP、物価、雇用、財政、貿易、為替、支持率、安定度
+-- 企業の生産・雇用・利益・経営危機・倒産
+-- 所得階層別の幸福度・怒り・雇用
+-- 国家間の信頼・脅威・依存・貿易協定と基礎AI
+-- 政治・議会：4政党、200議席、連立政権、選挙、法律、政治資本
+-- 研究・公共事業：6研究分野、技術解放、交通・電力・大学・医療・デジタル整備
+-- 国家危機：洪水、地震、感染症、エネルギー危機、金融不安と3段階の対応
+-- 軍事・戦争：国防予算、動員、兵站、戦線、損耗、戦争疲弊、講和
+-- 情報・諜報：偵察、世論工作、産業破壊、防諜、露見時の外交悪化
+-- 実績：長期運営、技術立国、外交網、健全財政、繁栄国家
+-- 指標変化の原因説明と危機発生時の自動停止
+-- Web Workerによるシミュレーション実行
+-- IndexedDBへの10世代保存、破損世代のスキップ、JSON入出力
+-- 同じシードと命令で同じ結果を返す決定論的処理
++- 画面上部に1・3・6・12か月のターン進行ボタンを常時表示
++- 財務・国民生活・外交安全保障の3人のアドバイザー
++- 最初の12ターンに対応した初心者ミッション
++- 国家評価ランクとキャラクターポートレート
++- 専門用語を日常語へ置き換えた主要指標
++- 遊び方・用語・詰まったときの固定ガイド
++- 未確定命令の確認、個別取消、全取消
++- 命令追加時の政治資本・国庫の累積費用チェック
++- 失敗命令を自動解除し、ターン進行不能から復旧
++- 保存直後に「最新セーブから再開」を有効化
+ 
+-## 必要環境
+-
+-- Node.js 22以上
+-- npm
+-- 最新版のChrome、Edge、Firefox、Safariのいずれか
+-
+-外部の有料API、サーバー、画像素材は不要です。
+-
+-## 開発コマンド
++## 検証
+ 
+ ```bash
+ npm install
+ npm run verify
+-npm run serve
+ ```
+ 
+-`npm run serve`後、`http://localhost:4173`をPCブラウザで開きます。
+-
+-| コマンド | 内容 |
+-|---|---|
+-| `npm test` | 単体・再現性・1,200ターン耐久・構成テスト |
+-| `npm run typecheck` | TypeScript厳格チェック |
+-| `npm run build` | `dist/`へ静的ファイルを生成 |
+-| `npm run verify` | テスト、型検査、ビルドを一括実行 |
+-| `npm run serve` | `dist/`をローカル配信 |
+-
+-## Cloudflare Pagesへの無料公開
+-
+-GitHubリポジトリをCloudflare Pagesへ接続し、以下を設定します。
+-
+-| 設定 | 値 |
+-|---|---|
+-| Framework preset | None |
+-| Build command | `npm install --no-audit --no-fund && npm run build` |
+-| Build output directory | `dist` |
+-| Root directory | `/` |
+-| Production branch | `main` |
+-| Node.js version | `22` |
+-
+-`public/_headers`と`public/_redirects`はビルド時に`dist/`へコピーされます。
+-
+-## 設計上の制約
+-
+-- シミュレーション内では`Math.random()`を使用しません。
+-- 全状態はJSONへシリアライズ可能です。
+-- UIに国家計算式を置かず、シミュレーションエンジンと分離します。
+-- セーブデータはチェックサムで破損を検出します。
+-- 現時点の正本はローカル実装です。GitHubの空リポジトリ作成後にブランチと履歴を投入します。
+-
+-## ドキュメント
+-
+-- `docs/superpowers/specs/2026-07-24-project-sovereign-master-design.md`
+-- `docs/superpowers/plans/2026-07-24-project-sovereign-foundation.md`
+-- `docs/superpowers/plans/2026-07-24-project-sovereign-expanded-systems.md`
+-- `docs/implementation-notes/0001-zero-dependency-browser-stack.md`
++CloudflareのBuild commandは`bash cloudflare-build.sh`、出力先は`dist`です。
+diff --git a/cloudflare-build.sh b/cloudflare-build.sh
+new file mode 100755
+index 0000000..d2389e8
+--- /dev/null
++++ b/cloudflare-build.sh
+@@ -0,0 +1,21 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++echo "PROJECT SOVEREIGN direct source build v0.3.0"
++echo "Repository commit: $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
++
++npm install --no-audit --no-fund
++npm run verify
++rm -f dist/_redirects
++
++test -f dist/index.html
++test -f dist/src/ui/main.js
++grep -q '初心者ミッション' dist/src/ui/main.js
++grep -q '遊び方・用語・詰まったとき' dist/src/ui/main.js
++
++if find dist -type f -name '_redirects' -print -quit | grep -q .; then
++  echo 'ERROR: _redirects must not be deployed.' >&2
++  exit 1
++fi
++
++echo "Deployment output verified: $(find dist -type f | wc -l | tr -d ' ') files"
+diff --git a/package.json b/package.json
+index b19ad32..d18b70e 100644
+--- a/package.json
++++ b/package.json
+@@ -1,9 +1,11 @@
+ {
+   "name": "project-sovereign",
+-  "version": "0.2.0",
++  "version": "0.3.0",
+   "private": true,
+   "type": "module",
+-  "engines": { "node": ">=22" },
++  "engines": {
++    "node": ">=22"
++  },
+   "scripts": {
+     "test": "node scripts/test.mjs",
+     "typecheck": "tsc -p tsconfig.json --noEmit",
+diff --git a/public/_redirects b/public/_redirects
+deleted file mode 100644
+index 7797f7c..0000000
+--- a/public/_redirects
++++ /dev/null
+@@ -1 +0,0 @@
+-/* /index.html 200
+diff --git a/public/styles.css b/public/styles.css
+index dea35f1..100833b 100644
+--- a/public/styles.css
++++ b/public/styles.css
+@@ -263,3 +263,79 @@ tbody th { font-weight:600; }
+ .achievement-item small { color: var(--muted); }
