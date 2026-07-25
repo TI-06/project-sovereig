@@ -16,7 +16,6 @@ printf 'Repository commit: %s\n' "$(git rev-parse --short HEAD 2>/dev/null || ec
 rm -rf "$WORK" "$OUTPUT"
 mkdir -p "$WORK"
 
-# Rebuild the verified v0.3 source from the v0.2 base and line-safe text patch.
 unzip -tqq "$BASE"
 unzip -q "$BASE" -d "$WORK"
 PROJECT="$WORK/project-sovereign"
@@ -33,7 +32,6 @@ cat "${V03_PARTS[@]}" > "$V03_PATCH"
 cd "$PROJECT"
 patch --batch --forward -p1 < "$V03_PATCH"
 
-# Apply the verified v0.4 text patch. No fixed SHA value is used.
 cd "$ROOT"
 V04_PARTS=("$ROOT"/releases/v0.4/v04.patch.xz.b64.part-*)
 if (( ${#V04_PARTS[@]} != 7 )); then
@@ -41,13 +39,30 @@ if (( ${#V04_PARTS[@]} != 7 )); then
   exit 1
 fi
 printf 'v0.4 patch parts: %s\n' "${#V04_PARTS[@]}"
-cat "${V04_PARTS[@]}" > "$V04_BASE64"
-base64 --decode "$V04_BASE64" > "$V04_XZ"
-xz -t "$V04_XZ"
-xz -dc "$V04_XZ" > "$V04_PATCH"
+cat "${V04_PARTS[@]}" | tr -d '\r\n\t ' > "$V04_BASE64"
+printf 'v0.4 Base64 bytes: %s\n' "$(wc -c < "$V04_BASE64" | tr -d ' ')"
+
+if ! base64 --decode "$V04_BASE64" > "$V04_XZ"; then
+  echo 'ERROR: v0.4 patch Base64 decoding failed.' >&2
+  exit 1
+fi
+printf 'v0.4 compressed patch bytes: %s\n' "$(wc -c < "$V04_XZ" | tr -d ' ')"
+
+if ! xz -t "$V04_XZ"; then
+  echo 'ERROR: v0.4 compressed patch integrity check failed.' >&2
+  exit 1
+fi
+if ! xz -dc "$V04_XZ" > "$V04_PATCH"; then
+  echo 'ERROR: v0.4 patch decompression failed.' >&2
+  exit 1
+fi
+printf 'v0.4 text patch bytes: %s\n' "$(wc -c < "$V04_PATCH" | tr -d ' ')"
 
 cd "$PROJECT"
-git apply --check "$V04_PATCH"
+if ! git apply --check "$V04_PATCH"; then
+  echo 'ERROR: v0.4 patch does not apply to reconstructed v0.3 source.' >&2
+  exit 1
+fi
 git apply "$V04_PATCH"
 
 test -f src/gameplay/policy-guidance.ts
