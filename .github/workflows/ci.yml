@@ -24,3 +24,10 @@ jobs:
           name: project-sovereign-v0.3-dist
           path: dist
           if-no-files-found: error
+      - name: Export reconstructed source for v0.4 development
+        run: tar -czf project-sovereign-v0.3-source.tar.gz -C .cf-build project-sovereign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-sovereign-v0.3-source
+          path: project-sovereign-v0.3-source.tar.gz
+          if-no-files-found: error
