@@ -1,0 +1,111 @@
+ aria-label="ターン操作">
++        <div class="dock-resource"><span>国庫</span><strong>${number.format(nation.treasury)} B</strong></div>
++        <div class="dock-resource"><span>政治資本</span><strong>${number.format(parliament.politicalCapital)}</strong></div>
++        <button type="button" class="dock-queue ${commands ? 'has-items' : ''}" data-action="toggle-queue"><span>未確定命令</span><strong>${commands}件</strong><small>${costs.politicalCapital ? `政治資本 ${number.format(costs.politicalCapital)}` : '内容を確認'}</small></button>
++        <div class="dock-help"><span>${busy ? '処理中です…' : stopMessage ? '危機対応を確認してください' : '進める期間を選択'}</span><small>危険を検知すると途中で停止します</small></div>
++        <div class="turn-buttons" aria-label="ターン進行">
++          ${([1, 3, 6, 12] as const).map((months) => `<button type="button" data-advance="${months}" ${busy ? 'disabled' : ''}><strong>${months}</strong><span>か月</span></button>`).join('')}
++        </div>
++      </section>
+       <aside class="sidebar">
+-        <div class="nation-identity"><span class="nation-emblem"></span><div><small>統治国家</small><strong>${escapeHtml(nation.shortName)}</strong></div></div>
++        <div class="nation-identity">${portrait('leader')}<div><small>統治国家</small><strong>${escapeHtml(nation.shortName)}</strong><span>${escapeHtml(nation.name)}</span></div></div>
+         <nav aria-label="主要機能">${nav}</nav>
+-        <div class="sidebar-state"><span>未確定政策</span><strong>${commands}件</strong><small>${commands ? '次回ターンに適用' : '変更なし'}</small></div>
++        <button type="button" class="sidebar-guide" data-action="guide"><strong>困ったとき</strong><small>遊び方・用語・進めない原因</small></button>
+       </aside>
+       <main class="workspace">
+         ${statusMessage ? `<div class="notice" role="status">${escapeHtml(statusMessage)}</div>` : ''}
+-        ${stopMessage ? `<div class="crisis-banner" role="alert"><strong>高速進行を停止</strong><span>${escapeHtml(stopMessage)}</span><button type="button" data-action="dismiss-stop">確認</button></div>` : ''}
++        ${stopMessage ? `<div class="crisis-banner" role="alert"><strong>時間進行を停止</strong><span>${escapeHtml(stopMessage)}</span><button type="button" data-action="dismiss-stop">確認</button></div>` : ''}
+         ${renderTab()}
+       </main>
+-      <footer class="turnbar">
+-        <div><span class="turnbar__label">政策を確定して時間を進める</span><small>${busy ? '国家シミュレーションを処理しています…' : '危機条件に一致すると途中で停止します'}</small></div>
+-        <div class="turn-buttons" aria-label="ターン進行">
+-          ${([1, 3, 6, 12] as const).map((months) => `<button type="button" data-advance="${months}" ${busy ? 'disabled' : ''}><strong>${months}</strong><span>か月</span></button>`).join('')}
+-        </div>
+-      </footer>
++      ${queueOpen ? commandQueuePanel() : ''}
++      ${guideOpen ? guidePanel() : ''}
+     </div>
+     <input id="import-save" type="file" accept="application/json,.json" hidden>`;
+ }
+ 
++function commandQueuePanel(): string {
++  if (!world) return '';
++  const policy = getPolicyCommands();
++  const items = queuedCommands.map((command, index) => {
++    const cost = queuedCommandCost(world!, [command]);
++    const detail = [cost.politicalCapital ? `政治資本 ${number.format(cost.politicalCapital)}` : '', cost.treasury ? `国庫 ${number.format(cost.treasury)}B` : ''].filter(Boolean).join(' / ') || '追加費用なし';
++    return `<li><div><strong>${escapeHtml(commandLabel(world!, command))}</strong><small>${escapeHtml(detail)}</small></div><button type="button" data-remove-command="${index}">取り消す</button></li>`;
++  }).join('');
++  return `<div class="drawer-backdrop" data-action="toggle-queue"></div><aside class="command-drawer" aria-label="未確定命令">
++    <div class="drawer-header"><div><span>COMMAND QUEUE</span><h2>次のターンに実行する命令</h2></div><button type="button" data-action="toggle-queue">閉じる</button></div>
++    ${policy.length ? `<div class="queue-policy"><strong>政策・予算変更 ${policy.length}件</strong><span>政策画面で変更内容を確認できます。</span></div>` : ''}
++    ${items ? `<ul class="queue-list">${items}</ul>` : '<div class="empty-state"><strong>追加済みの命令はありません</strong><span>何もせずターンを進めることもできます。</span></div>'}
++    <div class="drawer-actions"><button type="button" class="button button--danger" data-action="clear-queue" ${queuedCommands.length || policy.length ? '' : 'disabled'}>すべて取り消す</button><button type="button" class="button button--secondary" data-action="toggle-queue">戻る</button></div>
++  </aside>`;
++}
++
++function guidePanel(): string {
++  return `<div class="modal-backdrop" data-action="guide"></div><section class="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
++    <div class="drawer-header"><div><span>PLAYER GUIDE</span><h2 id="guide-title">遊び方・用語・詰まったとき</h2></div><button type="button" data-action="guide">閉じる</button></div>
++    <div class="guide-grid">
++      <article><h3>基本の遊び方</h3><ol><li>「今月やること」を確認</li><li>必要なら政策や命令を追加</li><li>画面上部の「1か月」で結果を確認</li><li>慣れたら3・6・12か月を使用</li></ol></article>
++      <article><h3>進めなくなった場合</h3><p>上部の「未確定命令」を開き、費用の大きい命令を取り消してください。政治資本は支持率と国家安定が高いほど毎月回復します。</p></article>
++      <article><h3>国庫と政治資本</h3><p><strong>国庫</strong>は国のお金です。公共投資や危機対応などに使います。<br><strong>政治資本</strong>は議会を動かす力です。法案・選挙・宣戦に使います。</p></article>
++      <article><h3>おすすめの進め方</h3><p>初めは1か月ずつ進めます。国庫・支持率・物価・失業率のうち、悪化している項目を1つだけ改善すると関係性を理解しやすくなります。</p></article>
++    </div>
++  </section>`;
++}
++
+ function renderTab(): string {
+   switch (activeTab) {
+     case 'dashboard': return dashboardView();
+@@ -194,34 +235,35 @@ function dashboardView(): string {
+   if (!world) return '';
+   const nation = world.nations[world.playerNationId];
+   const debtRatio = nation.debt / Math.max(1, nation.gdp);
++  const mission = getMission(world);
++  const grade = getNationGrade(world);
++  const advisors = getAdvisorBriefing(world);
+   const metrics = [
+-    metricCard('名目GDP', `${number.format(nation.gdp)} B`, `前月比 ${signed(nation.growthRate * 100, 2)}%`, nation.growthRate < 0 ? 'danger' : 'good'),
+-    metricCard('年率インフレ', percent(nation.inflation), `CPI ${number.format(nation.cpi)}`, nation.inflation > 0.08 ? 'danger' : ''),
+-    metricCard('失業率', percent(nation.unemployment), `消費者信頼 ${number.format(nation.consumerConfidence)}`, nation.unemployment > 0.1 ? 'danger' : ''),
+-    metricCard('政権支持率', `${number.format(nation.approval)}%`, `国家安定 ${number.format(nation.stability)}`, nation.approval < 40 ? 'danger' : 'good'),
+-    metricCard('国庫', `${number.format(nation.treasury)} B`, `月次収支 ${signed(nation.monthlyRevenue - nation.monthlySpending)} B`, nation.treasury < 40 ? 'danger' : ''),
+-    metricCard('政府債務', `${number.format(nation.debt)} B`, `GDP比 ${percent(debtRatio, 0)}`, debtRatio > 1.2 ? 'danger' : ''),
++    metricCard('国の経済規模', `${number.format(nation.gdp)} B`, `今月の成長 ${signed(nation.growthRate * 100, 2)}%`, nation.growthRate < 0 ? 'danger' : 'good'),
++    metricCard('物価の上がり方', percent(nation.inflation), `生活費指数 ${number.format(nation.cpi)}`, nation.inflation > 0.08 ? 'danger' : ''),
++    metricCard('仕事がない人', percent(nation.unemployment), `暮らしの安心 ${number.format(nation.consumerConfidence)}`, nation.unemployment > 0.1 ? 'danger' : ''),
++    metricCard('政権への支持', `${number.format(nation.approval)}%`, `社会の安定 ${number.format(nation.stability)}`, nation.approval < 40 ? 'danger' : 'good'),
++    metricCard('国が使えるお金', `${number.format(nation.treasury)} B`, `今月の収支 ${signed(nation.monthlyRevenue - nation.monthlySpending)} B`, nation.treasury < 40 ? 'danger' : ''),
++    metricCard('国の借金', `${number.format(nation.debt)} B`, `経済規模との比率 ${percent(debtRatio, 0)}`, debtRatio > 1.2 ? 'danger' : ''),
+   ].join('');
+-  const explanation = nation.lastExplanations.slice(-6).reverse().map((entry) => `<li><span>${entry.metric}</span><strong>${signed(entry.delta, 2)}</strong><small>${escapeHtml(entry.causes.slice(0, 2).join(' / '))}</small></li>`).join('');
++  const explanation = nation.lastExplanations.slice(-6).reverse().map((entry) => `<li><span>${escapeHtml(readableMetric(entry.metric))}</span><strong>${signed(entry.delta, 2)}</strong><small>${escapeHtml(entry.causes.slice(0, 2).join(' / '))}</small></li>`).join('');
+   const events = world.events.slice(-7).reverse().map((event) => `<li><time>T${event.turn}</time><div><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.description)}</span></div></li>`).join('');
+   return `
+     <section class="section-heading">
+       <div><span>国家概況</span><h1>${escapeHtml(nation.shortName)} 統治ダッシュボード</h1></div>
+-      <p>経済・国民・財政・外交の変化を一画面で監視します。</p>
++      <p>アドバイザーの提案を確認し、1つずつ判断してください。</p>
+     </section>
++    <div class="game-status-row">
++      <article class="mission-card"><div class="mission-step"><strong>${mission.step}</strong><span>/${mission.total}</span></div><div><span>初心者ミッション</span><h3>${escapeHtml(mission.title)}</h3><p>${escapeHtml(mission.description)}</p></div><button type="button" class="button button--primary" data-tab="${mission.actionTab}">${escapeHtml(mission.actionLabel)}</button></article>
++      <article class="grade-card"><span>国家評価</span><strong>${grade.grade}</strong><div><b>${escapeHtml(grade.label)}</b><small>総合スコア ${grade.score}/100</small></div></article>
++    </div>
++    <div class="advisor-grid">${advisors.map((advisor, index) => `<article class="advisor-card advisor-card--${advisor.mood}">${portrait(index === 0 ? 'finance' : index === 1 ? 'society' : 'security')}<div><span>${advisor.role} ${advisor.name}</span><h3>${escapeHtml(advisor.summary)}</h3><p>${escapeHtml(advisor.advice)}</p><button type="button" class="text-button" data-tab="${advisor.actionTab}">提案を見る →</button></div></article>`).join('')}</div>
+     <div class="metric-grid metric-grid--six">${metrics}</div>
+-    <div class="overview-grid">
+-      ${panel('変化要因', `<ul class="cause-list">${explanation || '<li>まだ月次変化はありません。</li>'}</ul>`)}
+-      ${panel('国家イベント', `<ul class="event-list">${events || '<li>イベントはありません。</li>'}</ul>`)}
+-      ${panel('次の注視点', priorityBriefing())}
+-    </div>`;
++    <div class="overview-grid">${panel('なぜ数値が変わった？', `<ul class="cause-list">${explanation || '<li>まだ月次変化はありません。</li>'}</ul>`)}${panel('国家ニュース', `<ul class="event-list">${events || '<li>イベントはありません。</li>'}</ul>`)}${panel('何もしない場合', priorityBriefing())}</div>`;
+ }
+ 
+ function policiesView(): string {
+@@ -276,6 +318,7 @@ function policiesView(): string {
