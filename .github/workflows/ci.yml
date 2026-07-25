@@ -11,14 +11,14 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Reconstruct, test and build v0.4
+      - name: Reconstruct, test and build v0.5
         id: build
         continue-on-error: true
         run: bash cloudflare-build.sh > build.log 2>&1
@@ -31,20 +31,20 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: project-sovereign-v0.4-build-log
+          name: project-sovereign-v0.5-build-log
           path: build.log
           if-no-files-found: error
 
       - name: Export reconstructed source
         if: always()
-        run: tar -czf project-sovereign-reconstructed-source.tar.gz -C .cf-build project-sovereign
+        run: tar -czf project-sovereign-v0.5-source.tar.gz -C .cf-build project-sovereign
 
       - name: Upload reconstructed source
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: project-sovereign-reconstructed-source
-          path: project-sovereign-reconstructed-source.tar.gz
+          name: project-sovereign-v0.5-source
+          path: project-sovereign-v0.5-source.tar.gz
           if-no-files-found: error
 
       - name: Stop when build failed
@@ -53,6 +53,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: project-sovereign-v0.4-dist
+          name: project-sovereign-v0.5-dist
           path: dist
           if-no-files-found: error
