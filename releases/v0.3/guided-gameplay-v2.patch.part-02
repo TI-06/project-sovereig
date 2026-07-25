@@ -1,0 +1,208 @@
++.queue-list strong { font-size:12px; }
++.queue-list small { color:var(--muted); font-size:9px; }
++.drawer-actions { display:flex; justify-content:flex-end; gap:9px; padding-top:15px; border-top:1px solid var(--line); }
++.guide-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px; }
++.guide-grid article { padding:16px; border:1px solid var(--line-soft); border-radius:12px; background:rgba(15,31,50,.75); }
++.guide-grid h3 { margin:0 0 10px; font-size:14px; }
++.guide-grid p,.guide-grid li { color:var(--muted); font-size:11px; line-height:1.75; }
++.guide-grid ol { margin:0; padding-left:18px; }
++@media (max-width:1350px) {
++  .console-shell { grid-template-columns:190px 1fr; }
++  .game-status-row { grid-template-columns:1fr 220px; }
++  .advisor-grid { grid-template-columns:1fr; }
++  .advisor-card { min-height:auto; }
++  .dock-help { display:none; }
++}
+diff --git a/src/domain/command-planning.ts b/src/domain/command-planning.ts
+new file mode 100644
+index 0000000..97c7eb8
+--- /dev/null
++++ b/src/domain/command-planning.ts
+@@ -0,0 +1,100 @@
++import { getLawDefinition } from '../politics/catalog.js';
++import type { PlayerCommand, WorldState } from './types.js';
++
++export interface CommandCost {
++  politicalCapital: number;
++  treasury: number;
++}
++
++export type QueueInspection =
++  | { ok: true; cost: CommandCost; total: CommandCost; message: string }
++  | { ok: false; cost: CommandCost; total: CommandCost; message: string };
++
++const intelligenceCosts = { reconnaissance: 2.5, influence: 4.5, sabotage: 7 } as const;
++
++export function commandKey(command: PlayerCommand): string {
++  switch (command.type) {
++    case 'set-tax-rate': return `${command.type}:${command.tax}`;
++    case 'set-budget-share': return `${command.type}:${command.category}`;
++    case 'set-policy-rate':
++    case 'set-research-focus':
++    case 'set-military-budget':
++    case 'set-intelligence-budget':
++    case 'mobilize': return command.type;
++    case 'propose-trade-agreement':
++    case 'end-trade-agreement': return `${command.type}:${command.targetNationId}`;
++    case 'propose-law':
++    case 'repeal-law': return `${command.type}:${command.lawId}`;
++    case 'call-snap-election': return command.type;
++    case 'start-infrastructure-project': return `${command.type}:${command.regionId}:${command.projectType}`;
++    case 'respond-to-crisis': return `${command.type}:${command.crisisId}`;
++    case 'declare-war': return `${command.type}:${command.targetNationId}`;
++    case 'offer-peace': return `${command.type}:${command.warId}`;
++    case 'launch-intelligence-operation': return `${command.type}:${command.targetNationId}:${command.operationType}`;
++  }
++}
++
++export function estimateCommandCost(world: WorldState, command: PlayerCommand): CommandCost {
++  let politicalCapital = 0;
++  let treasury = 0;
++  if (command.type === 'propose-law') politicalCapital = getLawDefinition(command.lawId)?.politicalCost ?? 0;
++  if (command.type === 'repeal-law') politicalCapital = Math.ceil((getLawDefinition(command.lawId)?.politicalCost ?? 0) * 0.6);
++  if (command.type === 'call-snap-election') politicalCapital = 35;
++  if (command.type === 'declare-war') politicalCapital = 45;
++  if (command.type === 'launch-intelligence-operation') treasury = intelligenceCosts[command.operationType];
++  if (command.type === 'respond-to-crisis') {
++    const crisis = world.activeCrises[command.crisisId];
++    const share = command.response === 'emergency' ? 0.012 : command.response === 'measured' ? 0.006 : 0.0025;
++    if (crisis) treasury = world.nations[world.playerNationId].gdp * share * crisis.severity;
++  }
++  return { politicalCapital, treasury };
++}
++
++export function queuedCommandCost(world: WorldState, commands: PlayerCommand[]): CommandCost {
++  return commands.reduce((total, command) => {
++    const cost = estimateCommandCost(world, command);
++    return { politicalCapital: total.politicalCapital + cost.politicalCapital, treasury: total.treasury + cost.treasury };
++  }, { politicalCapital: 0, treasury: 0 });
++}
++
++export function inspectCommandQueue(world: WorldState, existing: PlayerCommand[], candidate: PlayerCommand): QueueInspection {
++  const cost = estimateCommandCost(world, candidate);
++  if (existing.some((item) => commandKey(item) === commandKey(candidate))) {
++    return { ok: false, cost, total: queuedCommandCost(world, existing), message: '同じ命令がすでに追加されています。命令一覧から取り消して変更してください。' };
++  }
++  const total = queuedCommandCost(world, [...existing, candidate]);
++  const nation = world.nations[world.playerNationId];
++  const parliament = world.parliaments[world.playerNationId];
++  if (total.politicalCapital > parliament.politicalCapital) {
++    const shortage = Math.ceil(total.politicalCapital - parliament.politicalCapital);
++    return { ok: false, cost, total, message: `政治資本が${shortage}不足しています。支持率と国家安定を保ってターンを進めると回復します。` };
++  }
++  if (total.treasury > nation.treasury) {
++    const shortage = Math.ceil(total.treasury - nation.treasury);
++    return { ok: false, cost, total, message: `国庫が${shortage}B不足しています。高額命令を取り消すか、税収を確保してから実行してください。` };
++  }
++  return { ok: true, cost, total, message: '命令を追加できます。' };
++}
++
++export function commandLabel(world: WorldState, command: PlayerCommand): string {
++  const nationName = (id: string): string => world.nations[id as keyof typeof world.nations]?.shortName ?? id;
++  switch (command.type) {
++    case 'set-tax-rate': return `${command.tax === 'income' ? '所得税' : command.tax === 'corporate' ? '法人税' : '消費税'}を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'set-policy-rate': return `政策金利を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'set-budget-share': return `${command.category === 'education' ? '教育' : command.category === 'healthcare' ? '医療' : '産業'}予算を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'propose-trade-agreement': return `${nationName(command.targetNationId)}へ貿易協定を提案`;
++    case 'end-trade-agreement': return `${nationName(command.targetNationId)}との貿易協定を終了`;
++    case 'propose-law': return `${getLawDefinition(command.lawId)?.name ?? command.lawId}を提出`;
++    case 'repeal-law': return `${getLawDefinition(command.lawId)?.name ?? command.lawId}を廃止`;
++    case 'call-snap-election': return '解散総選挙を実施';
++    case 'set-research-focus': return `研究重点を${command.focus}へ変更`;
++    case 'start-infrastructure-project': return `${world.regions[command.regionId]?.name ?? command.regionId}で${command.projectType}事業を開始`;
++    case 'respond-to-crisis': return `国家危機へ${command.response === 'emergency' ? '緊急' : command.response === 'measured' ? '重点' : '地方'}対応`;
++    case 'set-military-budget': return `国防予算を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'mobilize': return command.level === 'none' ? '動員を解除' : command.level === 'partial' ? '部分動員' : '全面動員';
++    case 'declare-war': return `${nationName(command.targetNationId)}へ宣戦`;
++    case 'offer-peace': return '講和を提案';
++    case 'set-intelligence-budget': return `情報予算を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'launch-intelligence-operation': return `${nationName(command.targetNationId)}へ${command.operationType === 'reconnaissance' ? '戦略偵察' : command.operationType === 'influence' ? '世論工作' : '産業破壊'}を実行`;
++  }
++}
+diff --git a/src/ui/guidance.ts b/src/ui/guidance.ts
+new file mode 100644
+index 0000000..d1e211c
+--- /dev/null
++++ b/src/ui/guidance.ts
+@@ -0,0 +1,84 @@
++import type { TabId } from './types.js';
++import type { WorldState } from '../domain/types.js';
++
++export interface Mission {
++  step: number;
++  total: number;
++  title: string;
++  description: string;
++  actionLabel: string;
++  actionTab: TabId;
++}
++
++export interface AdvisorMessage {
++  role: '財務官' | '国民生活担当' | '外交安全保障官';
++  name: string;
++  mood: 'good' | 'watch' | 'danger';
++  summary: string;
++  advice: string;
++  actionTab: TabId;
++}
++
++export interface NationGrade {
++  grade: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
++  score: number;
++  label: string;
++}
++
++const missions: Omit<Mission, 'step' | 'total'>[] = [
++  { title: '国家の状態を確認しよう', description: '支持率・国庫・物価・失業率の4項目を確認します。', actionLabel: 'ダッシュボードを見る', actionTab: 'dashboard' },
++  { title: '1か月進めて変化を見よう', description: '最初は命令を追加せず、経済と国民の自然な変化を確認します。', actionLabel: '上部の1か月を押す', actionTab: 'dashboard' },
++  { title: '税と予算の関係を知ろう', description: '税率を上げると国庫は増えますが、家計や企業の負担も増えます。', actionLabel: '政策・予算を開く', actionTab: 'policies' },
++  { title: '国民生活を確認しよう', description: '低所得層・中間層・高所得層で政策の影響が異なります。', actionLabel: '国民・社会を開く', actionTab: 'society' },
++  { title: '議会と政治資本を確認しよう', description: '法案や選挙には政治資本が必要です。使い切らず余裕を残します。', actionLabel: '政治・議会を開く', actionTab: 'politics' },
++  { title: '法案を1つ検討しよう', description: '効果・必要政治資本・議会支持を見てから法案を追加します。', actionLabel: '法案一覧を見る', actionTab: 'politics' },
++  { title: '産業の状態を確認しよう', description: '企業利益と雇用は税率・需要・物価の影響を受けます。', actionLabel: '産業・企業を開く', actionTab: 'companies' },
++  { title: '研究分野を選ぼう', description: '研究はすぐ効きませんが、長期的な国家成長を支えます。', actionLabel: '研究・公共事業を開く', actionTab: 'development' },
++  { title: '外交関係を確認しよう', description: '信頼・脅威・依存を見て、協定を提案する相手を選びます。', actionLabel: '外交を開く', actionTab: 'diplomacy' },
++  { title: '危機対応を確認しよう', description: '危機が起きると複数月進行が停止します。対応費用と効果を比較します。', actionLabel: '危機管理を開く', actionTab: 'crises' },
++  { title: '複数月進行を試そう', description: '平時は3か月、危険があるときは1か月進行がおすすめです。', actionLabel: '上部の進行ボタンを使う', actionTab: 'dashboard' },
++  { title: '自由統治を始めよう', description: 'アドバイザーの提案を参考に、国家目標を自分で決めます。', actionLabel: '国家概況へ戻る', actionTab: 'dashboard' },
++];
++
++export function getMission(world: WorldState): Mission {
++  const index = Math.min(missions.length - 1, Math.max(0, world.turn));
++  return { ...missions[index]!, step: index + 1, total: missions.length };
++}
++
++export function getNationGrade(world: WorldState): NationGrade {
++  const nation = world.nations[world.playerNationId];
++  const debtRatio = nation.debt / Math.max(1, nation.gdp);
++  const score = Math.max(0, Math.min(100,
++    nation.approval * 0.22 + nation.stability * 0.18 + (100 - nation.unemployment * 500) * 0.14
++    + (100 - Math.min(100, Math.abs(nation.inflation - 0.02) * 600)) * 0.12
++    + Math.max(0, 100 - debtRatio * 45) * 0.12 + nation.consumerConfidence * 0.1
++    + nation.businessConfidence * 0.12));
++  const grade = score >= 88 ? 'S' : score >= 78 ? 'A' : score >= 66 ? 'B' : score >= 54 ? 'C' : score >= 40 ? 'D' : 'F';
++  const label = grade === 'S' ? '繁栄国家' : grade === 'A' ? '安定成長' : grade === 'B' ? '堅調' : grade === 'C' ? '要注意' : grade === 'D' ? '危機前夜' : '国家危機';
++  return { grade, score: Math.round(score), label };
++}
++
++export function getAdvisorBriefing(world: WorldState): AdvisorMessage[] {
++  const nation = world.nations[world.playerNationId];
++  const debtRatio = nation.debt / Math.max(1, nation.gdp);
++  const finance: AdvisorMessage = nation.treasury < 12
++    ? { role: '財務官', name: 'ミラ・ヴォス', mood: 'danger', summary: '国庫の余裕がほとんどありません。', advice: '高額命令を控え、税収と月次収支を改善してください。', actionTab: 'policies' }
++    : debtRatio > 1.2
++      ? { role: '財務官', name: 'ミラ・ヴォス', mood: 'watch', summary: '政府債務が大きくなっています。', advice: '増税だけでなく、歳出と成長率の両方を見直してください。', actionTab: 'economy' }
++      : { role: '財務官', name: 'ミラ・ヴォス', mood: 'good', summary: '財政には当面の余力があります。', advice: '国庫を残しつつ、教育や産業へ段階的に投資できます。', actionTab: 'policies' };
++
++  const society: AdvisorMessage = nation.unemployment > 0.09
++    ? { role: '国民生活担当', name: 'ユナ・レイ', mood: 'danger', summary: '仕事を失う国民が増えています。', advice: '産業支援や景気刺激を検討し、急な増税は避けてください。', actionTab: 'society' }
++    : nation.approval < 45
++      ? { role: '国民生活担当', name: 'ユナ・レイ', mood: 'watch', summary: '政権への不満が広がっています。', advice: '階層別の幸福度を確認し、負担が偏っている層へ対応してください。', actionTab: 'society' }
++      : { role: '国民生活担当', name: 'ユナ・レイ', mood: 'good', summary: '国民生活は比較的安定しています。', advice: '支持率があるうちに中長期政策を進める好機です。', actionTab: 'politics' };
++
++  const dangerousRelation = Object.values(world.relations).find((relation) => relation.fromNationId === world.playerNationId && relation.threat > 65);
++  const crisis = Object.values(world.activeCrises).find((item) => item.nationId === world.playerNationId);
++  const security: AdvisorMessage = crisis
++    ? { role: '外交安全保障官', name: 'カイ・ローデン', mood: 'danger', summary: '国内で国家危機が進行しています。', advice: '複数月進行を避け、危機管理画面で対応方法を選んでください。', actionTab: 'crises' }
++    : dangerousRelation
++      ? { role: '外交安全保障官', name: 'カイ・ローデン', mood: 'watch', summary: '周辺国の脅威が高まっています。', advice: '外交関係を改善するか、防衛準備を段階的に進めてください。', actionTab: 'diplomacy' }
