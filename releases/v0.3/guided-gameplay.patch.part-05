@@ -1,0 +1,126 @@
+? 'danger' : 'good'),
++    metricCard('物価の上がり方', percent(nation.inflation), `目安は2%前後`, nation.inflation > 0.08 ? 'danger' : ''),
++    metricCard('仕事がない人', percent(nation.unemployment), `家計の景況感 ${number.format(nation.consumerConfidence)}`, nation.unemployment > 0.1 ? 'danger' : ''),
++    metricCard('政権への支持', `${number.format(nation.approval)}%`, `社会の安定 ${number.format(nation.stability)}`, nation.approval < 40 ? 'danger' : 'good'),
++    metricCard('使える国のお金', `${number.format(nation.treasury)} B`, `今月の収支 ${signed(nation.monthlyRevenue - nation.monthlySpending)} B`, nation.treasury < 40 ? 'danger' : ''),
++    metricCard('国の借金', `${number.format(nation.debt)} B`, `経済規模の ${percent(debtRatio, 0)}`, debtRatio > 1.2 ? 'danger' : ''),
+   ].join('');
+   const regions = Object.values(world.regions).map((region) => {
+     const owner = world!.nations[region.nationId];
+-    return `<div class="map-region" style="--region-color:${escapeHtml(owner.color)}" title="${escapeHtml(region.name)} / 人口${integer.format(region.population)}">
+-      <span>${escapeHtml(region.name)}</span><small>${escapeHtml(owner.shortName)}</small>
+-    </div>`;
++    return `<div class="map-region" style="--region-color:${escapeHtml(owner.color)}" title="${escapeHtml(region.name)} / 人口${integer.format(region.population)}"><span>${escapeHtml(region.name)}</span><small>${escapeHtml(owner.shortName)}</small></div>`;
+   }).join('');
+   const recent = [...world.history].slice(-24);
+-  const gdpValues = recent.map((item) => item.gdp);
+-  const approvalValues = recent.map((item) => item.approval);
+-  return `${viewHeader('EXECUTIVE OVERVIEW', '国家ダッシュボード', '経済・財政・国民・外交の変化を一画面で監視します。')}
++  const advisorCards = advisors.map((advisor, index) => `<article class="advisor-card advisor-card--${advisor.mood}">${portrait(index === 0 ? 'finance' : index === 1 ? 'society' : 'security')}<div><span>${advisor.role}・${escapeHtml(advisor.name)}</span><h3>${escapeHtml(advisor.summary)}</h3><p>${escapeHtml(advisor.advice)}</p><button type="button" class="text-button" data-tab="${advisor.actionTab}">確認する →</button></div></article>`).join('');
++  return `${viewHeader('EXECUTIVE OVERVIEW', '国家ダッシュボード', '今月の問題とおすすめ行動から確認できます。')}
++    <section class="game-status-row">
++      <article class="mission-card"><div class="mission-step"><strong>${mission.step}</strong><span>/ ${mission.total}</span></div><div><span>初心者ミッション</span><h3>${escapeHtml(mission.title)}</h3><p>${escapeHtml(mission.description)}</p></div><button type="button" class="button button--secondary" data-tab="${mission.actionTab}">${escapeHtml(mission.actionLabel)}</button></article>
++      <article class="grade-card"><span>現在の国家評価</span><strong>${grade.grade}</strong><div><b>${escapeHtml(grade.label)}</b><small>総合スコア ${grade.score}</small></div></article>
++    </section>
++    <section class="advisor-grid" aria-label="アドバイザーからの提案">${advisorCards}</section>
+     <section class="metrics-grid">${metrics}</section>
+     <section class="dashboard-grid">
+-      <article class="panel panel--map"><div class="panel-heading"><div><span>WORLD STATUS</span><h3>世界情勢マップ</h3></div><small>12地域 / 4国家</small></div><div class="world-map">${regions}</div></article>
+-      <article class="panel"><div class="panel-heading"><div><span>TREND</span><h3>主要指標推移</h3></div><small>直近${recent.length}か月</small></div>
+-        ${sparkline('GDP', gdpValues, `${number.format(nation.gdp)} B`)}
+-        ${sparkline('支持率', approvalValues, `${number.format(nation.approval)}%`)}
+-      </article>
+-      <article class="panel"><div class="panel-heading"><div><span>PRIORITY</span><h3>対応優先事項</h3></div></div>${priorityList()}</article>
+-      <article class="panel"><div class="panel-heading"><div><span>ACHIEVEMENTS</span><h3>国家実績</h3></div><small>${Object.keys(world.achievements).length} / ${achievementCatalog.length}解除</small></div>${achievementSummary()}</article>
+-      <article class="panel"><div class="panel-heading"><div><span>LATEST REPORT</span><h3>最新国家月報</h3></div><button type="button" class="text-button" data-tab="report">詳細</button></div>${latestSummary()}</article>
++      <article class="panel panel--map"><div class="panel-heading"><div><span>WORLD STATUS</span><h3>世界情勢</h3></div><small>12地域 / 4国家</small></div><div class="world-map">${regions}</div></article>
++      <article class="panel"><div class="panel-heading"><div><span>TREND</span><h3>最近の変化</h3></div><small>直近${recent.length}か月</small></div>${sparkline('経済規模', recent.map((item) => item.gdp), `${number.format(nation.gdp)} B`)}${sparkline('支持率', recent.map((item) => item.approval), `${number.format(nation.approval)}%`)}</article>
++      <article class="panel"><div class="panel-heading"><div><span>PRIORITY</span><h3>今月やること</h3></div></div>${priorityList()}</article>
++      <article class="panel"><div class="panel-heading"><div><span>LATEST REPORT</span><h3>前月の結果</h3></div><button type="button" class="text-button" data-tab="report">詳しく見る</button></div>${latestSummary()}</article>
+     </section>`;
+ }
+ 
+@@ -508,6 +550,12 @@ function bindEvents(): void {
+   }));
+   root.querySelectorAll<HTMLElement>('[data-advance]').forEach((button) => button.addEventListener('click', () => void advance(Number(button.dataset.advance) as 1 | 3 | 6 | 12)));
+   root.querySelectorAll<HTMLElement>('[data-action]').forEach((button) => button.addEventListener('click', () => void action(button.dataset.action ?? '')));
++  root.querySelectorAll<HTMLElement>('[data-remove-command]').forEach((button) => button.addEventListener('click', () => {
++    const index = Number(button.dataset.removeCommand);
++    if (Number.isInteger(index) && index >= 0 && index < queuedCommands.length) queuedCommands.splice(index, 1);
++    statusMessage = '命令を取り消しました。';
++    render();
++  }));
+   root.querySelectorAll<HTMLElement>('[data-trade-action]').forEach((button) => button.addEventListener('click', () => {
+     if (!world) return;
+     const target = button.dataset.targetNation as NationId;
+@@ -544,21 +592,32 @@ function bindEvents(): void {
+ 
+ 
+ function queueCommand(command: PlayerCommand, message: string, replaceType?: PlayerCommand['type']): void {
+-  if (replaceType) queuedCommands = queuedCommands.filter((item) => item.type !== replaceType);
+-  queuedCommands.push(command);
+-  statusMessage = message;
++  if (!world) return;
++  const base = replaceType ? queuedCommands.filter((item) => item.type !== replaceType) : queuedCommands;
++  const inspection = inspectCommandQueue(world, base, command);
++  if (!inspection.ok) {
++    statusMessage = inspection.message;
++    queueOpen = true;
++    render();
++    return;
++  }
++  queuedCommands = [...base, command];
++  statusMessage = `${message} 実行前に上部の「未確定命令」で確認できます。`;
+   render();
+ }
+ 
+ async function action(name: string): Promise<void> {
+   if (name === 'save') await saveNow('手動保存を作成しました。');
+   if (name === 'export') exportSave();
++  if (name === 'guide') { guideOpen = !guideOpen; render(); }
++  if (name === 'toggle-queue') { queueOpen = !queueOpen; render(); }
++  if (name === 'clear-queue') { syncDraft(); queuedCommands = []; queueOpen = false; statusMessage = '未確定の政策・命令をすべて取り消しました。'; render(); }
+   if (name === 'new-game') {
+     if (confirm('現在のゲームを終了して国家選択へ戻りますか？未保存の変更は失われます。')) {
+-      world = null; policyDraft = null; queuedCommands = []; activeTab = 'dashboard'; statusMessage = ''; stopMessage = ''; render();
++      world = null; policyDraft = null; queuedCommands = []; guideOpen = false; queueOpen = false; activeTab = 'dashboard'; statusMessage = ''; stopMessage = ''; render();
+     }
+   }
+   if (name === 'dismiss-stop') { stopMessage = ''; render(); }
+@@ -575,13 +634,19 @@ async function advance(months: 1 | 3 | 6 | 12): Promise<void> {
+   const commands = [...getPolicyCommands(), ...queuedCommands];
+   busy = true; statusMessage = `${months}か月の国家シミュレーションを実行しています。`; render();
+   try {
+-    const result = await worker.advance(world, commands, months);
++    const result = await worker.advance(world, commands, months);
+     world = result.state;
+     stopMessage = result.stoppedEarly ? result.stopReason ?? '重大事象を検出しました。' : '';
+     statusMessage = result.stoppedEarly ? `進行を${result.monthsAdvanced}か月で停止しました。` : `${months}か月の進行が完了しました。`;
+     policyDraft = createPolicyDraft(world); queuedCommands = [];
+     await saveNow('', false);
+   } catch (error) {
+-    statusMessage = error instanceof Error ? error.message : String(error);
++    const message = error instanceof Error ? error.message : String(error);
++    queuedCommands = [];
++    syncDraft();
++    queueOpen = true;
++    statusMessage = `${message} 失敗した未確定命令を解除しました。内容を見直して再度進めてください。`;
+   } finally {
+     busy = false; render();
+   }
+@@ -592,6 +657,7 @@ async function saveNow(message: string, announce = true): Promise<void> {
+   try {
+     const envelope = createSaveEnvelope(world, world.commandLog);
+     await saveRepository.save(serializeSave(envelope));
++    latestSaveAvailable = true;
+     if (announce && message) statusMessage = message;
+   } catch (error) {
+     statusMessage = `保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
+@@ -609,6 +675,10 @@ function exportSave(): void {
+   URL.revokeObjectURL(url);
+ }
+ 
++function syncDraft(): void {
++  if (world) policyDraft = createPolicyDraft(world);
++}
++
