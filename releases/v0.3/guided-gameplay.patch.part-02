@@ -1,0 +1,106 @@
+lection') politicalCapital = 35;
++  if (command.type === 'declare-war') politicalCapital = 45;
++  if (command.type === 'launch-intelligence-operation') treasury = intelligenceCosts[command.operationType];
++  if (command.type === 'respond-to-crisis') {
++    const crisis = world.activeCrises[command.crisisId];
++    const share = command.response === 'emergency' ? 0.012 : command.response === 'measured' ? 0.006 : 0.0025;
++    if (crisis) treasury = world.nations[world.playerNationId].gdp * share * crisis.severity;
++  }
++  return { politicalCapital, treasury };
++}
++
++export function queuedCommandCost(world: WorldState, commands: PlayerCommand[]): CommandCost {
++  return commands.reduce((total, command) => {
++    const cost = estimateCommandCost(world, command);
++    return { politicalCapital: total.politicalCapital + cost.politicalCapital, treasury: total.treasury + cost.treasury };
++  }, { politicalCapital: 0, treasury: 0 });
++}
++
++export function inspectCommandQueue(world: WorldState, existing: PlayerCommand[], candidate: PlayerCommand): QueueInspection {
++  const cost = estimateCommandCost(world, candidate);
++  if (existing.some((item) => commandKey(item) === commandKey(candidate))) {
++    return { ok: false, cost, total: queuedCommandCost(world, existing), message: '同じ命令がすでに追加されています。命令一覧から取り消して変更してください。' };
++  }
++  const total = queuedCommandCost(world, [...existing, candidate]);
++  const nation = world.nations[world.playerNationId];
++  const parliament = world.parliaments[world.playerNationId];
++  if (total.politicalCapital > parliament.politicalCapital) {
++    const shortage = Math.ceil(total.politicalCapital - parliament.politicalCapital);
++    return { ok: false, cost, total, message: `政治資本が${shortage}不足しています。支持率と国家安定を保ってターンを進めると回復します。` };
++  }
++  if (total.treasury > nation.treasury) {
++    const shortage = Math.ceil(total.treasury - nation.treasury);
++    return { ok: false, cost, total, message: `国庫が${shortage}B不足しています。高額命令を取り消すか、税収を確保してから実行してください。` };
++  }
++  return { ok: true, cost, total, message: '命令を追加できます。' };
++}
++
++export function commandLabel(world: WorldState, command: PlayerCommand): string {
++  const nationName = (id: string): string => world.nations[id as keyof typeof world.nations]?.shortName ?? id;
++  switch (command.type) {
++    case 'set-tax-rate': return `${command.tax === 'income' ? '所得税' : command.tax === 'corporate' ? '法人税' : '消費税'}を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'set-policy-rate': return `政策金利を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'set-budget-share': return `${command.category === 'education' ? '教育' : command.category === 'healthcare' ? '医療' : '産業'}予算を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'propose-trade-agreement': return `${nationName(command.targetNationId)}へ貿易協定を提案`;
++    case 'end-trade-agreement': return `${nationName(command.targetNationId)}との貿易協定を終了`;
++    case 'propose-law': return `${getLawDefinition(command.lawId)?.name ?? command.lawId}を提出`;
++    case 'repeal-law': return `${getLawDefinition(command.lawId)?.name ?? command.lawId}を廃止`;
++    case 'call-snap-election': return '解散総選挙を実施';
++    case 'set-research-focus': return `研究重点を${command.focus}へ変更`;
++    case 'start-infrastructure-project': return `${world.regions[command.regionId]?.name ?? command.regionId}で${command.projectType}事業を開始`;
++    case 'respond-to-crisis': return `国家危機へ${command.response === 'emergency' ? '緊急' : command.response === 'measured' ? '重点' : '地方'}対応`;
++    case 'set-military-budget': return `国防予算を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'mobilize': return command.level === 'none' ? '動員を解除' : command.level === 'partial' ? '部分動員' : '全面動員';
++    case 'declare-war': return `${nationName(command.targetNationId)}へ宣戦`;
++    case 'offer-peace': return '講和を提案';
++    case 'set-intelligence-budget': return `情報予算を${(command.value * 100).toFixed(1)}%へ変更`;
++    case 'launch-intelligence-operation': return `${nationName(command.targetNationId)}へ${command.operationType === 'reconnaissance' ? '戦略偵察' : command.operationType === 'influence' ? '世論工作' : '産業破壊'}を実行`;
++  }
++}
+diff --git a/src/ui/guidance.ts b/src/ui/guidance.ts
+new file mode 100644
+index 0000000..d1e211c
+--- /dev/null
++++ b/src/ui/guidance.ts
+@@ -0,0 +1,84 @@
++import type { TabId } from './types.js';
++import type { WorldState } from '../domain/types.js';
++
++export interface Mission {
++  step: number;
++  total: number;
++  title: string;
++  description: string;
++  actionLabel: string;
++  actionTab: TabId;
++}
++
++export interface AdvisorMessage {
++  role: '財務官' | '国民生活担当' | '外交安全保障官';
++  name: string;
++  mood: 'good' | 'watch' | 'danger';
++  summary: string;
++  advice: string;
++  actionTab: TabId;
++}
++
++export interface NationGrade {
++  grade: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
++  score: number;
++  label: string;
++}
++
++const missions: Omit<Mission, 'step' | 'total'>[] = [
++  { title: '国家の状態を確認しよう', description: '支持率・国庫・物価・失業率の4項目を確認します。', actionLabel: 'ダッシュボードを見る', actionTab: 'dashboard' },
++  { title: '1か月進めて変化を見よう', description: '最初は命令を追加せず、経済と国民の自然な変化を確認します。', actionLabel: '上部の1か月を押す', actionTab: 'dashboard' },
++  { title: '税と予算の関係を知ろう', description: '税率を上げると国庫は増えますが、家計や企業の負担も増えます。', actionLabel: '政策・予算を開く', actionTab: 'policies' },
++  { title: '国民生活を確認しよう', description: '低所得層・中間層・高所得層で政策の影響が異なります。', actionLabel: '国民・社会を開く', actionTab: 'society' },
++  { title: '議会と政治資本を確認しよう', description: '法案や選挙には政治資本が必要です。使い切らず余裕を残します。', actionLabel: '政治・議会を開く', actionTab: 'politics' },
++  { title: '法案を1つ検討しよう', description: '効果・必要政治資本・議会支持を見てから法案を追加します。', actionLabel: '法案一覧を見る', actionTab: 'politics' },
++  { title: '産業の状態を確認しよう', description: '企業利益と雇用は税率・需要・物価の影響を受けます。', actionLabel: '産業・企業を開く', actionTab: 'companies' },
++  { title: '研究分野を選ぼう', description: '研究はすぐ効きませんが、長期的な国家成長を支えます。', actionLabel: '研究・公共事業を開く', actionTab: 'development' },
++  { title: '外交関係を確認しよう', description: '信頼・脅威・依存を見て、協定を提案する相手を選びます。', actionLabel: '外交を開く', actionTab: 'diplomacy' },
++  { title: '危機対応を確認しよう', description: '危機が起きると複数月進行が停止します。対応費用と効果を比較します。', actionLabel: '危機管理を開く', actionTab: 'crises' },
++  { title: '複数月進行を試そう', description: '平時は3か月、危険があるときは1か月進行がおすすめです。', actionLabel: '上部の進行ボタンを使う', actionTab: 'dashboard' },
++  { title: '自由統治を始めよう', description: 'アドバイザーの提案を参考に、国家目標を自分で決めます。', actionLabel: '国家概況へ戻る', actionTab: 'dashboard' },
++];
