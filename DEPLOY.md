@@ -9,4 +9,4 @@
 - Release: `v0.3.0`
 - Source commit: `5bd63269`
 
-`cloudflare-build.sh`はv0.2ソースを展開し、v0.3差分をSHA-256検証後に適用して、型検査と静的ビルドを実行します。
+`cloudflare-build.sh`はv0.2ソースを展開し、Git管理されたv0.3分割データを復元します。復元後はZIP整合性、必須ファイル、TypeScript型検査、静的ビルド、公開成果物を検証します。
