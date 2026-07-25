@@ -54,7 +54,8 @@ test -f src/gameplay/policy-guidance.ts
 test -f src/gameplay/crisis-director.ts
 test -f src/gameplay/turn-debrief.ts
 test -f src/gameplay/choice-events.ts
-test -f src/ui/gameplay-views.ts
+test -f src/ui/main.ts
+test -f src/ui/visual-language.ts
 test ! -f public/_redirects
 
 npm install --no-audit --no-fund
