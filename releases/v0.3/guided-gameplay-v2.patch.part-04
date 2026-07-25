@@ -1,0 +1,245 @@
++      <article class="mission-card"><div class="mission-step"><strong>${mission.step}</strong><span>/ ${mission.total}</span></div><div><span>初心者ミッション</span><h3>${escapeHtml(mission.title)}</h3><p>${escapeHtml(mission.description)}</p></div><button type="button" class="button button--secondary" data-tab="${mission.actionTab}">${escapeHtml(mission.actionLabel)}</button></article>
++      <article class="grade-card"><span>現在の国家評価</span><strong>${grade.grade}</strong><div><b>${escapeHtml(grade.label)}</b><small>総合スコア ${grade.score}</small></div></article>
++    </section>
++    <section class="advisor-grid" aria-label="アドバイザーからの提案">${advisorCards}</section>
+     <section class="metrics-grid">${metrics}</section>
+     <section class="dashboard-grid">
+-      <article class="panel panel--map"><div class="panel-heading"><div><span>WORLD STATUS</span><h3>世界情勢マップ</h3></div><small>12地域 / 4国家</small></div><div class="world-map">${regions}</div></article>
+-      <article class="panel"><div class="panel-heading"><div><span>TREND</span><h3>主要指標推移</h3></div><small>直近${recent.length}か月</small></div>
+-        ${sparkline('GDP', gdpValues, `${number.format(nation.gdp)} B`)}
+-        ${sparkline('支持率', approvalValues, `${number.format(nation.approval)}%`)}
+-      </article>
+-      <article class="panel"><div class="panel-heading"><div><span>PRIORITY</span><h3>対応優先事項</h3></div></div>${priorityList()}</article>
+-      <article class="panel"><div class="panel-heading"><div><span>ACHIEVEMENTS</span><h3>国家実績</h3></div><small>${Object.keys(world.achievements).length} / ${achievementCatalog.length}解除</small></div>${achievementSummary()}</article>
+-      <article class="panel"><div class="panel-heading"><div><span>LATEST REPORT</span><h3>最新国家月報</h3></div><button type="button" class="text-button" data-tab="report">詳細</button></div>${latestSummary()}</article>
++      <article class="panel panel--map"><div class="panel-heading"><div><span>WORLD STATUS</span><h3>世界情勢</h3></div><small>12地域 / 4国家</small></div><div class="world-map">${regions}</div></article>
++      <article class="panel"><div class="panel-heading"><div><span>TREND</span><h3>最近の変化</h3></div><small>直近${recent.length}か月</small></div>${sparkline('経済規模', recent.map((item) => item.gdp), `${number.format(nation.gdp)} B`)}${sparkline('支持率', recent.map((item) => item.approval), `${number.format(nation.approval)}%`)}</article>
++      <article class="panel"><div class="panel-heading"><div><span>PRIORITY</span><h3>今月やること</h3></div></div>${priorityList()}</article>
++      <article class="panel"><div class="panel-heading"><div><span>LATEST REPORT</span><h3>前月の結果</h3></div><button type="button" class="text-button" data-tab="report">詳しく見る</button></div>${latestSummary()}</article>
+     </section>`;
+ }
+ 
+@@ -508,6 +550,12 @@ function bindEvents(): void {
+   }));
+   root.querySelectorAll<HTMLElement>('[data-advance]').forEach((button) => button.addEventListener('click', () => void advance(Number(button.dataset.advance) as 1 | 3 | 6 | 12)));
+   root.querySelectorAll<HTMLElement>('[data-action]').forEach((button) => button.addEventListener('click', () => void action(button.dataset.action ?? '')));
++  root.querySelectorAll<HTMLElement>('[data-remove-command]').forEach((button) => button.addEventListener('click', () => {
++    const index = Number(button.dataset.removeCommand);
++    if (Number.isInteger(index) && index >= 0 && index < queuedCommands.length) queuedCommands.splice(index, 1);
++    statusMessage = '命令を取り消しました。';
++    render();
++  }));
+   root.querySelectorAll<HTMLElement>('[data-trade-action]').forEach((button) => button.addEventListener('click', () => {
+     if (!world) return;
+     const target = button.dataset.targetNation as NationId;
+@@ -544,21 +592,32 @@ function bindEvents(): void {
+ 
+ 
+ function queueCommand(command: PlayerCommand, message: string, replaceType?: PlayerCommand['type']): void {
+-  if (replaceType) queuedCommands = queuedCommands.filter((item) => item.type !== replaceType);
+-  queuedCommands.push(command);
+-  statusMessage = message;
++  if (!world) return;
++  const base = replaceType ? queuedCommands.filter((item) => item.type !== replaceType) : queuedCommands;
++  const inspection = inspectCommandQueue(world, base, command);
++  if (!inspection.ok) {
++    statusMessage = inspection.message;
++    queueOpen = true;
++    render();
++    return;
++  }
++  queuedCommands = [...base, command];
++  statusMessage = `${message} 実行前に上部の「未確定命令」で確認できます。`;
+   render();
+ }
+ 
+ async function action(name: string): Promise<void> {
+   if (name === 'save') await saveNow('手動保存を作成しました。');
+   if (name === 'export') exportSave();
++  if (name === 'guide') { guideOpen = !guideOpen; render(); }
++  if (name === 'toggle-queue') { queueOpen = !queueOpen; render(); }
++  if (name === 'clear-queue') { syncDraft(); queuedCommands = []; queueOpen = false; statusMessage = '未確定の政策・命令をすべて取り消しました。'; render(); }
+   if (name === 'new-game') {
+     if (confirm('現在のゲームを終了して国家選択へ戻りますか？未保存の変更は失われます。')) {
+-      world = null; policyDraft = null; queuedCommands = []; activeTab = 'dashboard'; stopMessage = ''; statusMessage = ''; render();
++      world = null; policyDraft = null; queuedCommands = []; activeTab = 'dashboard'; stopMessage = ''; statusMessage = ''; guideOpen = false; queueOpen = false; render();
+     }
+   }
+-  if (name === 'reset-policies') { syncDraft(); queuedCommands = []; statusMessage = '未確定の政策・命令を取り消しました。'; render(); }
++  if (name === 'reset-policies') { syncDraft(); statusMessage = '未確定の政策変更を取り消しました。'; render(); }
+   if (name === 'dismiss-stop') { stopMessage = ''; render(); }
+ }
+ 
+@@ -590,7 +649,11 @@ async function advance(months: 1 | 3 | 6 | 12, extraCommands: PlayerCommand[] =
+     await saveRepository.save(createSaveEnvelope(world));
+     if (stopMessage || result.reports.some((report) => report.events.length > 0)) activeTab = 'report';
+   } catch (error) {
+-    statusMessage = error instanceof Error ? error.message : 'ターン処理に失敗しました。';
++    const reason = error instanceof Error ? error.message : 'ターン処理に失敗しました。';
++    queuedCommands = [];
++    syncDraft();
++    queueOpen = false;
++    statusMessage = `${reason} 失敗した命令は自動的に取り消しました。もう一度進められます。`;
+   } finally {
+     busy = false;
+     render();
+@@ -601,6 +664,7 @@ async function saveNow(message: string): Promise<void> {
+   if (!world) return;
+   try {
+     await saveRepository.save(createSaveEnvelope(world));
++    latestSaveAvailable = true;
+     if (message) statusMessage = message;
+   } catch (error) {
+     statusMessage = error instanceof Error ? error.message : '保存に失敗しました。';
+diff --git a/src/ui/portraits.ts b/src/ui/portraits.ts
+new file mode 100644
+index 0000000..3dd7cd4
+--- /dev/null
++++ b/src/ui/portraits.ts
+@@ -0,0 +1,23 @@
++export type PortraitId = 'leader' | 'finance' | 'society' | 'security';
++
++const faces: Record<PortraitId, { hair: string; coat: string; accent: string; label: string }> = {
++  leader: { hair: '#202a44', coat: '#24385f', accent: '#d4af6a', label: '国家元首' },
++  finance: { hair: '#4d3044', coat: '#344a63', accent: '#78c4b4', label: '財務官' },
++  society: { hair: '#6b3d31', coat: '#64405d', accent: '#e4a9b0', label: '国民生活担当' },
++  security: { hair: '#30343b', coat: '#3f4b3e', accent: '#b8c58c', label: '外交安全保障官' },
++};
++
++export function portrait(id: PortraitId): string {
++  const item = faces[id];
++  return `<svg class="character-portrait" viewBox="0 0 96 96" role="img" aria-label="${item.label}">
++    <defs><linearGradient id="bg-${id}" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${item.coat}"/><stop offset="1" stop-color="#111827"/></linearGradient></defs>
++    <rect width="96" height="96" rx="24" fill="url(#bg-${id})"/>
++    <circle cx="48" cy="39" r="22" fill="#e7bd9a"/>
++    <path d="M25 40c0-22 10-31 24-31 15 0 25 11 23 31-7-8-14-12-24-12-9 0-16 4-23 12Z" fill="${item.hair}"/>
++    <circle cx="40" cy="41" r="2" fill="#263238"/><circle cx="57" cy="41" r="2" fill="#263238"/>
++    <path d="M42 52c4 3 8 3 12 0" fill="none" stroke="#9b604f" stroke-width="2" stroke-linecap="round"/>
++    <path d="M17 96c2-24 14-35 31-35s30 11 32 35" fill="${item.coat}"/>
++    <path d="m39 63 9 12 9-12" fill="${item.accent}"/>
++    <circle cx="75" cy="21" r="8" fill="${item.accent}" opacity=".9"/><path d="M72 21h6M75 18v6" stroke="#101827" stroke-width="1.6"/>
++  </svg>`;
++}
+diff --git a/src/ui/types.ts b/src/ui/types.ts
+new file mode 100644
+index 0000000..38ac569
+--- /dev/null
++++ b/src/ui/types.ts
+@@ -0,0 +1 @@
++export type TabId = 'dashboard' | 'policies' | 'politics' | 'economy' | 'companies' | 'society' | 'development' | 'diplomacy' | 'defense' | 'intelligence' | 'crises' | 'report';
+diff --git a/tests/command-planning.test.ts b/tests/command-planning.test.ts
+new file mode 100644
+index 0000000..90e550c
+--- /dev/null
++++ b/tests/command-planning.test.ts
+@@ -0,0 +1,38 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { createInitialWorld } from '../dist/src/content/create-world.js';
++import { inspectCommandQueue, commandKey, commandLabel } from '../dist/src/domain/command-planning.js';
++
++const world = createInitialWorld({ playerNationId: 'nation:arcadia', seed: 'planning-test' });
++
++test('rejects commands whose cumulative political cost exceeds current capital', () => {
++  const first = { type: 'propose-law', lawId: 'universal-healthcare' } as const;
++  const second = { type: 'propose-law', lawId: 'industrial-strategy' } as const;
++  const third = { type: 'call-snap-election' } as const;
++  const result = inspectCommandQueue(world, [first, second], third);
++  assert.equal(result.ok, false);
++  assert.match(result.message, /政治資本が13不足/);
++});
++
++test('rejects an identical queued command before advancing', () => {
++  const command = { type: 'propose-law', lawId: 'industrial-strategy' } as const;
++  const result = inspectCommandQueue(world, [command], command);
++  assert.equal(result.ok, false);
++  assert.match(result.message, /同じ命令/);
++});
++
++test('reports treasury costs for intelligence operations', () => {
++  const command = { type: 'launch-intelligence-operation', targetNationId: 'nation:valen', operationType: 'sabotage' } as const;
++  const result = inspectCommandQueue(world, [], command);
++  assert.equal(result.ok, true);
++  assert.equal(result.cost.treasury, 7);
++  assert.match(commandLabel(world, command), /産業破壊/);
++});
++
++test('command keys distinguish targets but collapse replaceable settings', () => {
++  assert.equal(commandKey({ type: 'set-policy-rate', value: 0.02 }), 'set-policy-rate');
++  assert.notEqual(
++    commandKey({ type: 'propose-trade-agreement', targetNationId: 'nation:valen' }),
++    commandKey({ type: 'propose-trade-agreement', targetNationId: 'nation:selene' }),
++  );
++});
+diff --git a/tests/guidance.test.ts b/tests/guidance.test.ts
+new file mode 100644
+index 0000000..1e097a7
+--- /dev/null
++++ b/tests/guidance.test.ts
+@@ -0,0 +1,25 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { createInitialWorld } from '../dist/src/content/create-world.js';
++import { getAdvisorBriefing, getMission, getNationGrade } from '../dist/src/ui/guidance.js';
++
++test('new players receive an actionable first mission', () => {
++  const world = createInitialWorld({ playerNationId: 'nation:arcadia', seed: 'guide-test' });
++  const mission = getMission(world);
++  assert.equal(mission.step, 1);
++  assert.match(mission.title, /国家の状態/);
++  assert.ok(mission.actionTab);
++});
++
++test('advisor briefing explains a concrete next action', () => {
++  const world = createInitialWorld({ playerNationId: 'nation:arcadia', seed: 'guide-test' });
++  world.nations[world.playerNationId].treasury = 3;
++  const briefing = getAdvisorBriefing(world);
++  assert.equal(briefing[0]?.role, '財務官');
++  assert.match(briefing[0]?.advice ?? '', /高額命令|税収|国庫/);
++});
++
++test('nation grade is a familiar letter rank', () => {
++  const world = createInitialWorld({ playerNationId: 'nation:arcadia', seed: 'guide-test' });
++  assert.match(getNationGrade(world).grade, /^[SABCDF]$/);
++});
+diff --git a/tests/repository.test.ts b/tests/repository.test.ts
+index 38bcdce..d4760db 100644
+--- a/tests/repository.test.ts
++++ b/tests/repository.test.ts
+@@ -4,13 +4,15 @@ import { existsSync, readFileSync } from 'node:fs';
+ 
+ const read = (path: string): string => readFileSync(path, 'utf8');
+ 
+-test('repository includes reproducible verification and static deployment contracts', () => {
++test('repository includes reproducible verification and direct static deployment contracts', () => {
+   assert.equal(existsSync('README.md'), true, 'README.md must exist');
+-  assert.equal(existsSync('public/_headers'), true, 'Cloudflare Pages headers must exist');
+-  assert.equal(existsSync('public/_redirects'), true, 'SPA fallback must exist');
++  assert.equal(existsSync('public/_headers'), true, 'security headers must exist');
++  assert.equal(existsSync('public/_redirects'), false, 'Workers Static Assets must not receive a Pages _redirects file');
++  assert.equal(existsSync('wrangler.jsonc'), true, 'Wrangler configuration must exist');
++  assert.equal(existsSync('cloudflare-build.sh'), true, 'Cloudflare build script must exist');
+   assert.equal(existsSync('.github/workflows/ci.yml'), true, 'GitHub Actions workflow must exist');
+   const packageJson = JSON.parse(read('package.json'));
+-  assert.equal(packageJson.version, '0.2.0');
++  assert.equal(packageJson.version, '0.3.0');
+ 
+   const gitignore = read('.gitignore');
+   assert.match(gitignore, /node_modules\//);
+@@ -20,13 +22,16 @@ test('repository includes reproducible verification and static deployment contra
+   assert.match(headers, /Content-Security-Policy/);
+   assert.match(headers, /X-Content-Type-Options: nosniff/);
+ 
+-  const redirects = read('public/_redirects');
+-  assert.match(redirects, /\/index\.html\s+200/);
++  const wrangler = read('wrangler.jsonc');
++  assert.match(wrangler, /"directory": "\.\/dist"/);
+ 
+   const readme = read('README.md');
+-  assert.match(readme, /政治・議会/);
+-  assert.match(readme, /軍事・戦争/);
+-  assert.match(readme, /情報・諜報/);
++  assert.match(readme, /初心者ミッション/);
++  assert.match(readme, /未確定命令/);
++
++  const buildScript = read('cloudflare-build.sh');
