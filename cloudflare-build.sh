@@ -10,7 +10,7 @@ V04_BASE64="$WORK/project-sovereign-v0.4.0.patch.xz.b64"
 V04_XZ="$WORK/project-sovereign-v0.4.0.patch.xz"
 V04_PATCH="$WORK/project-sovereign-v0.4.0.patch"
 V04_APPLY_PATCH="$WORK/project-sovereign-v0.4.0.apply.patch"
-V05_XZ="$ROOT/releases/v0.5/project-sovereign-v0.5.0.patch.xz"
+V05_XZ="$WORK/project-sovereign-v0.5.0.patch.xz"
 V05_PATCH="$WORK/project-sovereign-v0.5.0.patch"
 V05_APPLY_PATCH="$WORK/project-sovereign-v0.5.0.apply.patch"
 
@@ -59,10 +59,17 @@ patch --batch --forward --dry-run -p1 < "$V04_APPLY_PATCH" >/dev/null
 patch --batch --forward -p1 < "$V04_APPLY_PATCH"
 echo 'v0.4 patch applied.'
 
-# Apply the v0.5 gameplay and balance patch from one binary XZ file.
+# Reconstruct the verified v0.5 XZ from eight byte-exact Git blobs.
 # No fixed SHA value and no Base64 reconstruction are used for v0.5.
 cd "$ROOT"
-test -f "$V05_XZ"
+V05_PARTS=("$ROOT"/releases/v0.5/chunks/part-*.bin)
+if (( ${#V05_PARTS[@]} != 8 )); then
+  echo "ERROR: expected 8 v0.5 binary chunks, found ${#V05_PARTS[@]}." >&2
+  exit 1
+fi
+printf 'v0.5 binary chunks: %s\n' "${#V05_PARTS[@]}"
+cat "${V05_PARTS[@]}" > "$V05_XZ"
+printf 'v0.5 compressed patch bytes: %s\n' "$(wc -c < "$V05_XZ" | tr -d ' ')"
 xz -t "$V05_XZ"
 xz -dc "$V05_XZ" > "$V05_PATCH"
 printf 'v0.5 text patch bytes: %s\n' "$(wc -c < "$V05_PATCH" | tr -d ' ')"
