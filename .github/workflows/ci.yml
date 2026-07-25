@@ -11,23 +11,45 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Reconstruct and build v0.3
-        run: bash cloudflare-build.sh
+
+      - name: Reconstruct, test and build v0.4
+        id: build
+        continue-on-error: true
+        run: bash cloudflare-build.sh > build.log 2>&1
+
+      - name: Show build log
+        if: always()
+        run: cat build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-sovereign-v0.4-build-log
+          path: build.log
+          if-no-files-found: error
+
+      - name: Stop when build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1
+
       - uses: actions/upload-artifact@v4
         with:
-          name: project-sovereign-v0.3-dist
+          name: project-sovereign-v0.4-dist
           path: dist
           if-no-files-found: error
-      - name: Export reconstructed source for v0.4 development
-        run: tar -czf project-sovereign-v0.3-source.tar.gz -C .cf-build project-sovereign
+
+      - name: Export reconstructed v0.4 source
+        run: tar -czf project-sovereign-v0.4-source.tar.gz -C .cf-build project-sovereign
+
       - uses: actions/upload-artifact@v4
         with:
-          name: project-sovereign-v0.3-source
-          path: project-sovereign-v0.3-source.tar.gz
+          name: project-sovereign-v0.4-source
+          path: project-sovereign-v0.4-source.tar.gz
           if-no-files-found: error
