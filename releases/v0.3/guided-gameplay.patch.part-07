@@ -1,0 +1,63 @@
+rt.equal(existsSync('public/_headers'), true, 'security headers must exist');
++  assert.equal(existsSync('public/_redirects'), false, 'Workers Static Assets must not receive a Pages _redirects file');
++  assert.equal(existsSync('wrangler.jsonc'), true, 'Wrangler configuration must exist');
++  assert.equal(existsSync('cloudflare-build.sh'), true, 'Cloudflare build script must exist');
+   assert.equal(existsSync('.github/workflows/ci.yml'), true, 'GitHub Actions workflow must exist');
+   const packageJson = JSON.parse(read('package.json'));
+-  assert.equal(packageJson.version, '0.2.0');
++  assert.equal(packageJson.version, '0.3.0');
+ 
+   const gitignore = read('.gitignore');
+   assert.match(gitignore, /node_modules\//);
+@@ -20,13 +22,16 @@ test('repository includes reproducible verification and static deployment contra
+   assert.match(headers, /Content-Security-Policy/);
+   assert.match(headers, /X-Content-Type-Options: nosniff/);
+ 
+-  const redirects = read('public/_redirects');
+-  assert.match(redirects, /\/index\.html\s+200/);
++  const wrangler = read('wrangler.jsonc');
++  assert.match(wrangler, /"directory": "\.\/dist"/);
+ 
+   const readme = read('README.md');
+-  assert.match(readme, /政治・議会/);
+-  assert.match(readme, /軍事・戦争/);
+-  assert.match(readme, /情報・諜報/);
++  assert.match(readme, /初心者ミッション/);
++  assert.match(readme, /未確定命令/);
++
++  const buildScript = read('cloudflare-build.sh');
++  assert.doesNotMatch(buildScript, /base64|sha256|unzip/);
++  assert.match(buildScript, /npm run verify/);
+ 
+   const workflow = read('.github/workflows/ci.yml');
+   assert.match(workflow, /npm run verify/);
+diff --git a/tests/ui-contract.test.ts b/tests/ui-contract.test.ts
+index 067402f..8ff58c2 100644
+--- a/tests/ui-contract.test.ts
++++ b/tests/ui-contract.test.ts
+@@ -13,7 +13,10 @@ test('built app exposes the playable government console', () => {
+   assert.match(script, /国防・戦争/);
+   assert.match(script, /情報・諜報/);
+   assert.match(script, /危機管理/);
+-  assert.match(script, /国家実績/);
++  assert.match(script, /初心者ミッション/);
++  assert.match(script, /遊び方・用語・詰まったとき/);
++  assert.match(script, /未確定命令/);
++  assert.match(script, /data-advance/);
+   assert.match(script, /data-law-action/);
+   assert.match(script, /data-intel-operation/);
+   const css = readFileSync('dist/styles.css', 'utf8');
+diff --git a/wrangler.jsonc b/wrangler.jsonc
+new file mode 100644
+index 0000000..e3a766a
+--- /dev/null
++++ b/wrangler.jsonc
+@@ -0,0 +1,8 @@
++{
++  "$schema": "node_modules/wrangler/config-schema.json",
++  "name": "project-sovereig",
++  "compatibility_date": "2026-07-25",
++  "assets": {
++    "directory": "./dist"
++  }
++}
