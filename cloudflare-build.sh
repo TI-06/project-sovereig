@@ -64,14 +64,25 @@ if ! git apply --check "$V04_PATCH"; then
   exit 1
 fi
 git apply "$V04_PATCH"
+echo 'v0.4 patch applied.'
 
-test -f src/gameplay/policy-guidance.ts
-test -f src/gameplay/crisis-director.ts
-test -f src/gameplay/turn-debrief.ts
-test -f src/gameplay/choice-events.ts
-test -f src/ui/main.ts
-test -f src/ui/visual-language.ts
-test ! -f public/_redirects
+for required in \
+  src/gameplay/policy-guidance.ts \
+  src/gameplay/crisis-director.ts \
+  src/gameplay/turn-debrief.ts \
+  src/gameplay/choice-events.ts \
+  src/ui/main.ts \
+  src/ui/visual-language.ts; do
+  if [[ ! -f "$required" ]]; then
+    echo "ERROR: required v0.4 source file is missing: $required" >&2
+    exit 1
+  fi
+done
+if [[ -f public/_redirects ]]; then
+  echo 'ERROR: public/_redirects remains after applying v0.4.' >&2
+  exit 1
+fi
+echo 'v0.4 source structure verified.'
 
 npm install --no-audit --no-fund
 npm run verify
