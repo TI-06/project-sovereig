@@ -1,0 +1,33 @@
+name: quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Reconstruct, test and build v0.4
+        run: bash cloudflare-build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-sovereign-v0.4-dist
+          path: dist
+          if-no-files-found: error
+      - name: Export reconstructed v0.4 source
+        run: tar -czf project-sovereign-v0.4-source.tar.gz -C .cf-build project-sovereign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-sovereign-v0.4-source
+          path: project-sovereign-v0.4-source.tar.gz
+          if-no-files-found: error
