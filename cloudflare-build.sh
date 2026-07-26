@@ -18,8 +18,11 @@ V06_PATCH="$WORK/project-sovereign-v0.6.0.patch"
 V06_APPLY_PATCH="$WORK/project-sovereign-v0.6.0.apply.patch"
 V061_XZ="$WORK/project-sovereign-v0.6.1-hotfix.patch.xz"
 V061_PATCH="$WORK/project-sovereign-v0.6.1-hotfix.patch"
+V062_XZ="$WORK/project-sovereign-v0.6.2-recovery-guidance.patch.xz"
+V062_PATCH="$WORK/project-sovereign-v0.6.2-recovery-guidance.patch"
+V062_APPLY_PATCH="$WORK/project-sovereign-v0.6.2-recovery-guidance.apply.patch"
 
-printf 'PROJECT SOVEREIGN Cloudflare build v0.6.1\n'
+printf 'PROJECT SOVEREIGN Cloudflare build v0.6.2\n'
 printf 'Repository commit: %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 rm -rf "$WORK" "$OUTPUT"
@@ -29,8 +32,9 @@ unzip -q "$BASE" -d "$WORK"
 PROJECT="$WORK/project-sovereign"
 test -f "$PROJECT/package.json"
 
-# Reconstruct the verified v0.3 source.
 shopt -s nullglob
+
+# Reconstruct the verified v0.3 source.
 V03_PARTS=("$ROOT"/releases/v0.3/guided-gameplay-v2.patch.part-*)
 if (( ${#V03_PARTS[@]} != 6 )); then
   echo "ERROR: expected 6 v0.3 patch files, found ${#V03_PARTS[@]}." >&2
@@ -121,9 +125,31 @@ patch --batch --forward --dry-run -p1 < "$V061_PATCH" >/dev/null
 patch --batch --forward -p1 < "$V061_PATCH"
 echo 'v0.6.1 hotfix applied.'
 
-node -e "const p=require('./package.json'); if(p.version!=='0.6.1') { console.error('Unexpected package version:', p.version); process.exit(1); }"
+# Apply the verified v0.6.2 recovery guidance patch.
+cd "$ROOT"
+V062_PARTS=("$ROOT"/releases/v0.6.2/chunks/part-*.bin)
+if (( ${#V062_PARTS[@]} != 4 )); then
+  echo "ERROR: expected 4 v0.6.2 recovery guidance chunks, found ${#V062_PARTS[@]}." >&2
+  exit 1
+fi
+printf 'v0.6.2 recovery guidance chunks: %s\n' "${#V062_PARTS[@]}"
+cat "${V062_PARTS[@]}" > "$V062_XZ"
+printf 'v0.6.2 compressed patch bytes: %s\n' "$(wc -c < "$V062_XZ" | tr -d ' ')"
+xz -t "$V062_XZ"
+xz -dc "$V062_XZ" > "$V062_PATCH"
+printf 'v0.6.2 text patch bytes: %s\n' "$(wc -c < "$V062_PATCH" | tr -d ' ')"
+awk '
+/^diff --git / { skip = ($0 == "diff --git a/package-lock.json b/package-lock.json") }
+!skip { print }
+' "$V062_PATCH" > "$V062_APPLY_PATCH"
+cd "$PROJECT"
+patch --batch --forward --dry-run -p1 < "$V062_APPLY_PATCH" >/dev/null
+patch --batch --forward -p1 < "$V062_APPLY_PATCH"
+echo 'v0.6.2 recovery guidance patch applied.'
+
+node -e "const p=require('./package.json'); if(p.version!=='0.6.2') { console.error('Unexpected package version:', p.version); process.exit(1); }"
 if [[ -f public/_redirects ]]; then
-  echo 'ERROR: public/_redirects remains after applying v0.6.1.' >&2
+  echo 'ERROR: public/_redirects remains after applying v0.6.2.' >&2
   exit 1
 fi
 
@@ -146,10 +172,16 @@ for marker in \
   '国家年表' \
   '今月あなたが決めたこと' \
   '次にやること' \
-  '選択済み・次ターンで実行' \
-  '別のイベントも同時に選択できます'; do
+  '✓ 選択済み' \
+  '次のターン開始時に反映されます' \
+  'もう一度クリックすると取り消せます' \
+  'まずやること' \
+  '改善確認' \
+  '国庫枯渇' \
+  '貿易赤字' \
+  '企業倒産増加'; do
   if ! grep -R -q -- "$marker" "$OUTPUT"; then
-    echo "ERROR: v0.6.1 deployment marker is missing: $marker" >&2
+    echo "ERROR: v0.6.2 deployment marker is missing: $marker" >&2
     exit 1
   fi
 done
@@ -159,4 +191,4 @@ if find "$OUTPUT" -type f -name '_redirects' -print -quit | grep -q .; then
   exit 1
 fi
 
-printf 'Deployment output verified: %s files; v0.6.1 tests and build passed.\n' "$(find "$OUTPUT" -type f | wc -l | tr -d ' ')"
+printf 'Deployment output verified: %s files; v0.6.2 tests and build passed.\n' "$(find "$OUTPUT" -type f | wc -l | tr -d ' ')"
