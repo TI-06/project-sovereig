@@ -18,8 +18,11 @@ V06_PATCH="$WORK/project-sovereign-v0.6.0.patch"
 V06_APPLY_PATCH="$WORK/project-sovereign-v0.6.0.apply.patch"
 V061_XZ="$WORK/project-sovereign-v0.6.1-hotfix.patch.xz"
 V061_PATCH="$WORK/project-sovereign-v0.6.1-hotfix.patch"
+V062_BASE64="$WORK/project-sovereign-v0.6.2.patch.xz.b64"
+V062_XZ="$WORK/project-sovereign-v0.6.2.patch.xz"
+V062_PATCH="$WORK/project-sovereign-v0.6.2.patch"
 
-printf 'PROJECT SOVEREIGN Cloudflare build v0.6.1\n'
+printf 'PROJECT SOVEREIGN Cloudflare build v0.6.2\n'
 printf 'Repository commit: %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 rm -rf "$WORK" "$OUTPUT"
@@ -121,9 +124,28 @@ patch --batch --forward --dry-run -p1 < "$V061_PATCH" >/dev/null
 patch --batch --forward -p1 < "$V061_PATCH"
 echo 'v0.6.1 hotfix applied.'
 
-node -e "const p=require('./package.json'); if(p.version!=='0.6.1') { console.error('Unexpected package version:', p.version); process.exit(1); }"
+# Reconstruct and apply the verified v0.6.2 crisis guidance patch.
+cd "$ROOT"
+V062_PARTS=("$ROOT"/releases/v0.6.2/v062.patch.xz.b64.part-*)
+if (( ${#V062_PARTS[@]} != 4 )); then
+  echo "ERROR: expected 4 v0.6.2 patch parts, found ${#V062_PARTS[@]}." >&2
+  exit 1
+fi
+printf 'v0.6.2 patch parts: %s\n' "${#V062_PARTS[@]}"
+cat "${V062_PARTS[@]}" | tr -d '\r\n\t ' > "$V062_BASE64"
+base64 --decode "$V062_BASE64" > "$V062_XZ"
+printf 'v0.6.2 compressed patch bytes: %s\n' "$(wc -c < "$V062_XZ" | tr -d ' ')"
+xz -t "$V062_XZ"
+xz -dc "$V062_XZ" > "$V062_PATCH"
+printf 'v0.6.2 text patch bytes: %s\n' "$(wc -c < "$V062_PATCH" | tr -d ' ')"
+cd "$PROJECT"
+patch --batch --forward --dry-run -p1 < "$V062_PATCH" >/dev/null
+patch --batch --forward -p1 < "$V062_PATCH"
+echo 'v0.6.2 crisis guidance patch applied.'
+
+node -e "const p=require('./package.json'); if(p.version!=='0.6.2') { console.error('Unexpected package version:', p.version); process.exit(1); }"
 if [[ -f public/_redirects ]]; then
-  echo 'ERROR: public/_redirects remains after applying v0.6.1.' >&2
+  echo 'ERROR: public/_redirects remains after applying v0.6.2.' >&2
   exit 1
 fi
 
@@ -147,9 +169,12 @@ for marker in \
   '今月あなたが決めたこと' \
   '次にやること' \
   '選択済み・次ターンで実行' \
-  '別のイベントも同時に選択できます'; do
+  '別のイベントも同時に選択できます' \
+  '危機対応ナビ' \
+  '回避策を見る' \
+  'この対策を未確定命令へ追加'; do
   if ! grep -R -q -- "$marker" "$OUTPUT"; then
-    echo "ERROR: v0.6.1 deployment marker is missing: $marker" >&2
+    echo "ERROR: v0.6.2 deployment marker is missing: $marker" >&2
     exit 1
   fi
 done
@@ -159,4 +184,4 @@ if find "$OUTPUT" -type f -name '_redirects' -print -quit | grep -q .; then
   exit 1
 fi
 
-printf 'Deployment output verified: %s files; v0.6.1 tests and build passed.\n' "$(find "$OUTPUT" -type f | wc -l | tr -d ' ')"
+printf 'Deployment output verified: %s files; v0.6.2 tests and build passed.\n' "$(find "$OUTPUT" -type f | wc -l | tr -d ' ')"
