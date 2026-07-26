@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Reconstruct, test and build v0.5
+      - name: Reconstruct, test and build v0.6
         id: build
         continue-on-error: true
         run: bash cloudflare-build.sh > build.log 2>&1
@@ -31,20 +31,20 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: project-sovereign-v0.5-build-log
+          name: project-sovereign-v0.6-build-log
           path: build.log
           if-no-files-found: error
 
       - name: Export reconstructed source
         if: always()
-        run: tar -czf project-sovereign-v0.5-source.tar.gz -C .cf-build project-sovereign
+        run: tar -czf project-sovereign-v0.6-source.tar.gz -C .cf-build project-sovereign
 
       - name: Upload reconstructed source
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: project-sovereign-v0.5-source
-          path: project-sovereign-v0.5-source.tar.gz
+          name: project-sovereign-v0.6-source
+          path: project-sovereign-v0.6-source.tar.gz
           if-no-files-found: error
 
       - name: Stop when build failed
@@ -53,6 +53,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: project-sovereign-v0.5-dist
+          name: project-sovereign-v0.6-dist
           path: dist
           if-no-files-found: error
