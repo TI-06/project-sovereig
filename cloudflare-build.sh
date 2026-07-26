@@ -21,6 +21,7 @@ V061_PATCH="$WORK/project-sovereign-v0.6.1-hotfix.patch"
 V062_BASE64="$WORK/project-sovereign-v0.6.2.patch.xz.b64"
 V062_XZ="$WORK/project-sovereign-v0.6.2.patch.xz"
 V062_PATCH="$WORK/project-sovereign-v0.6.2.patch"
+V062_APPLY_PATCH="$WORK/project-sovereign-v0.6.2.apply.patch"
 
 printf 'PROJECT SOVEREIGN Cloudflare build v0.6.2\n'
 printf 'Repository commit: %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -138,9 +139,13 @@ printf 'v0.6.2 compressed patch bytes: %s\n' "$(wc -c < "$V062_XZ" | tr -d ' ')"
 xz -t "$V062_XZ"
 xz -dc "$V062_XZ" > "$V062_PATCH"
 printf 'v0.6.2 text patch bytes: %s\n' "$(wc -c < "$V062_PATCH" | tr -d ' ')"
+awk '
+/^diff --git / { skip = ($0 == "diff --git a/package-lock.json b/package-lock.json") }
+!skip { print }
+' "$V062_PATCH" > "$V062_APPLY_PATCH"
 cd "$PROJECT"
-patch --batch --forward --dry-run -p1 < "$V062_PATCH" >/dev/null
-patch --batch --forward -p1 < "$V062_PATCH"
+patch --batch --forward --dry-run -p1 < "$V062_APPLY_PATCH" >/dev/null
+patch --batch --forward -p1 < "$V062_APPLY_PATCH"
 echo 'v0.6.2 crisis guidance patch applied.'
 
 node -e "const p=require('./package.json'); if(p.version!=='0.6.2') { console.error('Unexpected package version:', p.version); process.exit(1); }"
