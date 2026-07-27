@@ -21,8 +21,12 @@ V061_PATCH="$WORK/project-sovereign-v0.6.1-hotfix.patch"
 V062_XZ="$WORK/project-sovereign-v0.6.2-recovery-guidance.patch.xz"
 V062_PATCH="$WORK/project-sovereign-v0.6.2-recovery-guidance.patch"
 V062_APPLY_PATCH="$WORK/project-sovereign-v0.6.2-recovery-guidance.apply.patch"
+V070_BASE64="$WORK/project-sovereign-v0.7.0.patch.xz.b64"
+V070_XZ="$WORK/project-sovereign-v0.7.0.patch.xz"
+V070_PATCH="$WORK/project-sovereign-v0.7.0.patch"
+V070_APPLY_PATCH="$WORK/project-sovereign-v0.7.0.apply.patch"
 
-printf 'PROJECT SOVEREIGN Cloudflare build v0.6.2\n'
+printf 'PROJECT SOVEREIGN Cloudflare build v0.7.0\n'
 printf 'Repository commit: %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 rm -rf "$WORK" "$OUTPUT"
@@ -147,9 +151,35 @@ patch --batch --forward --dry-run -p1 < "$V062_APPLY_PATCH" >/dev/null
 patch --batch --forward -p1 < "$V062_APPLY_PATCH"
 echo 'v0.6.2 recovery guidance patch applied.'
 
-node -e "const p=require('./package.json'); if(p.version!=='0.6.2') { console.error('Unexpected package version:', p.version); process.exit(1); }"
+# Reconstruct and apply the verified v0.7.0 political drama update.
+cd "$ROOT"
+V070_PARTS=("$ROOT"/releases/v0.7.0/chunks/part-*.b64)
+if (( ${#V070_PARTS[@]} != 13 )); then
+  echo "ERROR: expected 13 v0.7.0 base64 chunks, found ${#V070_PARTS[@]}." >&2
+  exit 1
+fi
+printf 'v0.7.0 base64 chunks: %s\n' "${#V070_PARTS[@]}"
+cat "${V070_PARTS[@]}" | tr -d '\r\n\t ' > "$V070_BASE64"
+printf 'v0.7.0 base64 bytes: %s\n' "$(wc -c < "$V070_BASE64" | tr -d ' ')"
+printf '%s  %s\n' 'f51d606c4ce01acc5bdf55b3e8a1231e223afefdb22a27aea03929a92047a7f3' "$V070_BASE64" | sha256sum --check --status
+base64 --decode "$V070_BASE64" > "$V070_XZ"
+printf '%s  %s\n' 'cf0abde792de623f970f84461e54e12a6cb9d3b1619857d21729fb363bdebea3' "$V070_XZ" | sha256sum --check --status
+xz -t "$V070_XZ"
+xz -dc "$V070_XZ" > "$V070_PATCH"
+printf 'v0.7.0 text patch bytes: %s\n' "$(wc -c < "$V070_PATCH" | tr -d ' ')"
+printf '%s  %s\n' 'ceac0db60670cfb187180a1419a2ddb7be69ac2bed18378faa3c6ae741a06686' "$V070_PATCH" | sha256sum --check --status
+awk '
+/^diff --git / { skip = ($0 == "diff --git a/package-lock.json b/package-lock.json") }
+!skip { print }
+' "$V070_PATCH" > "$V070_APPLY_PATCH"
+cd "$PROJECT"
+patch --batch --forward --dry-run -p1 < "$V070_APPLY_PATCH" >/dev/null
+patch --batch --forward -p1 < "$V070_APPLY_PATCH"
+echo 'v0.7.0 political drama update applied.'
+
+node -e "const p=require('./package.json'); if(p.version!=='0.7.0') { console.error('Unexpected package version:', p.version); process.exit(1); }"
 if [[ -f public/_redirects ]]; then
-  echo 'ERROR: public/_redirects remains after applying v0.6.2.' >&2
+  echo 'ERROR: public/_redirects remains after applying v0.7.0.' >&2
   exit 1
 fi
 
@@ -163,25 +193,30 @@ printf '_redirects\n' > "$OUTPUT/.assetsignore"
 
 test -f "$OUTPUT/index.html"
 test -f "$OUTPUT/src/ui/main.js"
+test -f "$OUTPUT/src/ui/command-center-view.js"
+test -f "$OUTPUT/src/ui/secretary-portraits.js"
+test -f "$OUTPUT/src/narrative/secretaries.js"
+test -f "$OUTPUT/src/narrative/survival.js"
+test -f "$OUTPUT/src/narrative/war-outcomes.js"
+test -f "$OUTPUT/src/narrative/endings.js"
+test -f "$OUTPUT/src/ui/money.js"
+
 for marker in \
-  '指令室' \
-  '国家方針' \
-  '危機・イベント' \
-  '国家プロジェクト' \
-  '国家分析' \
-  '国家年表' \
-  '今月あなたが決めたこと' \
-  '次にやること' \
-  '✓ 選択済み' \
-  '次のターン開始時に反映されます' \
-  'もう一度クリックすると取り消せます' \
-  'まずやること' \
-  '改善確認' \
-  '国庫枯渇' \
-  '貿易赤字' \
-  '企業倒産増加'; do
+  '政権を編成' \
+  '国家目標' \
+  '秘書官' \
+  'カウント停止中' \
+  '財政破綻' \
+  '開戦目的' \
+  '想定月額戦費' \
+  '戦後権益' \
+  '九条 澪' \
+  '天城 ひなた' \
+  '黒崎 蓮' \
+  '億円' \
+  '兆円'; do
   if ! grep -R -q -- "$marker" "$OUTPUT"; then
-    echo "ERROR: v0.6.2 deployment marker is missing: $marker" >&2
+    echo "ERROR: v0.7.0 deployment marker is missing: $marker" >&2
     exit 1
   fi
 done
@@ -191,4 +226,4 @@ if find "$OUTPUT" -type f -name '_redirects' -print -quit | grep -q .; then
   exit 1
 fi
 
-printf 'Deployment output verified: %s files; v0.6.2 tests and build passed.\n' "$(find "$OUTPUT" -type f | wc -l | tr -d ' ')"
+printf 'Deployment output verified: %s files; v0.7.0 tests and build passed.\n' "$(find "$OUTPUT" -type f | wc -l | tr -d ' ')"
