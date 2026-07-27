@@ -22,11 +22,23 @@ test -f "$PROJECT/package.json"
 # Reconstruct and apply the verified v0.7.3 command room, map, and war room update.
 cd "$ROOT"
 shopt -s nullglob
-V073_PARTS=("$ROOT"/releases/v0.7.3/chunks/part-*.b64)
-if (( ${#V073_PARTS[@]} != 6 )); then
-  echo "ERROR: expected 6 v0.7.3 base64 chunks, found ${#V073_PARTS[@]}." >&2
-  exit 1
-fi
+V073_PARTS=(
+  "$ROOT/releases/v0.7.3/chunks/part-00.b64"
+  "$ROOT/releases/v0.7.3/chunks/part-01-00.b64"
+  "$ROOT/releases/v0.7.3/chunks/part-01-01.b64"
+  "$ROOT/releases/v0.7.3/chunks/part-01-02.b64"
+  "$ROOT/releases/v0.7.3/chunks/part-01-03.b64"
+  "$ROOT/releases/v0.7.3/chunks/part-02.b64"
+  "$ROOT/releases/v0.7.3/chunks/part-03.b64"
+  "$ROOT/releases/v0.7.3/chunks/part-04.b64"
+  "$ROOT/releases/v0.7.3/chunks/part-05.b64"
+)
+for part in "${V073_PARTS[@]}"; do
+  if [[ ! -f "$part" ]]; then
+    echo "ERROR: missing v0.7.3 patch chunk: $part" >&2
+    exit 1
+  fi
+done
 printf 'v0.7.3 base64 chunks: %s\n' "${#V073_PARTS[@]}"
 cat "${V073_PARTS[@]}" | tr -d '\r\n\t ' > "$V073_BASE64"
 printf 'v0.7.3 base64 bytes: %s\n' "$(wc -c < "$V073_BASE64" | tr -d ' ')"
